@@ -1,0 +1,6 @@
+{
+  "name": "TTS",
+  "description": "一个自动识别系统 TTS 引擎并将其转发至小说阅读软件（如阅读App）的本地 Web 转发工具。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
