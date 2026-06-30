@@ -81,32 +81,41 @@ class TtsServerService : Service() {
 
         serviceScope.launch {
             val db = AppDatabase.getDatabase(applicationContext)
-            val settings = db.appDao().getSettings() ?: SettingsEntity()
-            
-            _serverPort.value = settings.port
-            _activeEngine.value = settings.targetEnginePackage
-            
-            startHttpServer(settings.port)
-            
-            withContext(Dispatchers.Main) {
-                val engineLabel = getEngineLabel(settings.targetEnginePackage)
-                val notification = buildNotification(settings.port, engineLabel)
+            db.appDao().getSettingsFlow().collect { settingsOpt ->
+                val settings = settingsOpt ?: SettingsEntity()
                 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        startForeground(
-                            NOTIFICATION_ID,
-                            notification,
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-                        )
+                _serverPort.value = settings.port
+                _activeEngine.value = settings.targetEnginePackage
+                
+                if (serverSocket != null && serverSocket?.localPort != settings.port) {
+                    startHttpServer(settings.port)
+                } else if (serverSocket == null) {
+                    startHttpServer(settings.port)
+                }
+                
+                withContext(Dispatchers.Main) {
+                    val engineLabel = getEngineLabel(settings.targetEnginePackage)
+                    val notification = buildNotification(settings.port, engineLabel)
+                    
+                    val manager = getSystemService(NotificationManager::class.java)
+                    manager?.notify(NOTIFICATION_ID, notification)
+                    
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            startForeground(
+                                NOTIFICATION_ID,
+                                notification,
+                                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                            )
+                        } else {
+                            startForeground(
+                                NOTIFICATION_ID,
+                                notification
+                            )
+                        }
                     } else {
-                        startForeground(
-                            NOTIFICATION_ID,
-                            notification
-                        )
+                        startForeground(NOTIFICATION_ID, notification)
                     }
-                } else {
-                    startForeground(NOTIFICATION_ID, notification)
                 }
             }
         }
@@ -456,6 +465,7 @@ class TtsServerService : Service() {
             deferred.complete(status)
         }, enginePackage)
 
+        var isFallback = false
         var status = try {
             kotlinx.coroutines.withTimeout(5000) {
                 deferred.await()
@@ -466,6 +476,7 @@ class TtsServerService : Service() {
 
         // Fallback to default system TTS engine if target engine initialization fails or times out
         if (status != TextToSpeech.SUCCESS) {
+            isFallback = true
             try { tts.shutdown() } catch (e: Exception) {}
             
             val fallbackDeferred = CompletableDeferred<Int>()
@@ -495,7 +506,7 @@ class TtsServerService : Service() {
                 e.printStackTrace()
             }
             activeTts = tts
-            activeEnginePackage = tts.defaultEngine ?: enginePackage
+            activeEnginePackage = if (isFallback) (tts.defaultEngine ?: enginePackage) else enginePackage
             tts
         } else {
             try { tts.shutdown() } catch (e: Exception) {}

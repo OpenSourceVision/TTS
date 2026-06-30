@@ -199,13 +199,12 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
     fun copyLegadoConfig(context: Context, ipType: String = "127.0.0.1") {
         viewModelScope.launch {
             val settings = settingsState.value
-            val engineLabel = _engines.value.firstOrNull { it.packageName == settings.targetEnginePackage }?.label ?: "自定义引擎"
             val ip = if (ipType == "127.0.0.1") "127.0.0.1" else getWifiIpAddress(context)
             
             val json = """
             {
-              "name": "TTS转发 [${engineLabel}]",
-              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}&rate={{speakSpeed}}&engine=${settings.targetEnginePackage}",
+              "name": "TTS转发 [跟随App选择]",
+              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}&rate={{speakSpeed}}",
               "contentType": "audio/wav",
               "id": ${System.currentTimeMillis()}
             }
@@ -221,13 +220,12 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
     fun importToLegado(context: Context, ipType: String = "127.0.0.1") {
         viewModelScope.launch {
             val settings = settingsState.value
-            val engineLabel = _engines.value.firstOrNull { it.packageName == settings.targetEnginePackage }?.label ?: "自定义"
             val ip = if (ipType == "127.0.0.1") "127.0.0.1" else getWifiIpAddress(context)
             
             val json = """
             {
-              "name": "TTS转发 [${engineLabel}]",
-              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}&rate={{speakSpeed}}&engine=${settings.targetEnginePackage}",
+              "name": "TTS转发 [跟随App选择]",
+              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}&rate={{speakSpeed}}",
               "contentType": "audio/wav",
               "id": ${System.currentTimeMillis()}
             }
