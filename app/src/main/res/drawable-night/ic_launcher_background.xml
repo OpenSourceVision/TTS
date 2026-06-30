@@ -16,31 +16,11 @@
                 android:endX="108"
                 android:endY="108"
                 android:type="linear">
-                <item android:offset="0.0" android:color="#140D36" />
-                <item android:offset="0.5" android:color="#0B0E1E" />
-                <item android:offset="1.0" android:color="#05070F" />
+                <item android:offset="0.0" android:color="#2E285F" /> <!-- Lighter Deep Indigo -->
+                <item android:offset="0.5" android:color="#1B1E3B" /> <!-- Lighter Dark Navy -->
+                <item android:offset="1.0" android:color="#181B34" /> <!-- Soft Slate Indigo -->
             </gradient>
         </aapt:attr>
     </path>
     
-    <!-- Outer Glowing Orbital Ring (Cyan-Blue Accent) -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#0B38BDF8"
-        android:strokeWidth="1.2"
-        android:pathData="M 54,54 m -42,0 a 42,42 0 1,1 84,0 a 42,42 0 1,1 -84,0" />
-        
-    <!-- Mid Glowing Orbital Ring (Purple Accent) -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#10C084FC"
-        android:strokeWidth="1.0"
-        android:pathData="M 54,54 m -28,0 a 28,28 0 1,1 56,0 a 28,28 0 1,1 -56,0" />
-        
-    <!-- Inner Delicate Glowing Ring (Translucent White) -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#18FFFFFF"
-        android:strokeWidth="0.8"
-        android:pathData="M 54,54 m -16,0 a 16,16 0 1,1 32,0 a 16,16 0 1,1 -32,0" />
 </vector>
