@@ -67,14 +67,14 @@ jobs:
         run: |
           if [ -n "${{ secrets.SIGNING_KEY_BASE64 }}" ]; then
             echo "Decoding release signing key..."
-            echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > my-upload-key.jks
+            echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > "${{ github.workspace }}/my-upload-key.jks"
             echo "STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> $GITHUB_ENV
             echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
-            echo "KEYSTORE_PATH=my-upload-key.jks" >> $GITHUB_ENV
+            echo "KEYSTORE_PATH=${{ github.workspace }}/my-upload-key.jks" >> $GITHUB_ENV
           else
             echo "No custom signing key found in secrets. Generating a temporary signing key for this build..."
             keytool -genkeypair -v \
-              -keystore my-upload-key.jks \
+              -keystore "${{ github.workspace }}/my-upload-key.jks" \
               -alias upload \
               -keyalg RSA \
               -keysize 2048 \
@@ -85,7 +85,7 @@ jobs:
             
             echo "STORE_PASSWORD=temp_password" >> $GITHUB_ENV
             echo "KEY_PASSWORD=temp_password" >> $GITHUB_ENV
-            echo "KEYSTORE_PATH=my-upload-key.jks" >> $GITHUB_ENV
+            echo "KEYSTORE_PATH=${{ github.workspace }}/my-upload-key.jks" >> $GITHUB_ENV
           fi
 
       - name: Build Release APK and Bundle (AAB)
