@@ -98,27 +98,22 @@ jobs:
 
       - name: Locate and Rename Build Artifacts
         run: |
-          ARM64_APK=$(find app/build/outputs/apk/release -name "*arm64-v8a*.apk" | head -n 1)
-          ARMV7_APK=$(find app/build/outputs/apk/release -name "*armeabi-v7a*.apk" | head -n 1)
+          UNIVERSAL_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           
-          if [ -z "$ARM64_APK" ] || [ -z "$ARMV7_APK" ]; then
-            echo "Build artifacts not found!"
+          if [ -z "$UNIVERSAL_APK" ]; then
+            echo "Build artifact not found!"
             exit 1
           fi
           
           mkdir -p release-artifacts
           
-          NEW_ARM64_NAME="release-artifacts/TTS-V${{ env.NEW_VERSION }}-arm64-v8a.apk"
-          NEW_ARMV7_NAME="release-artifacts/TTS-V${{ env.NEW_VERSION }}-arm-v7a.apk"
+          NEW_NAME="release-artifacts/TTS-V${{ env.NEW_VERSION }}-universal.apk"
           
-          cp "$ARM64_APK" "$NEW_ARM64_NAME"
-          cp "$ARMV7_APK" "$NEW_ARMV7_NAME"
+          cp "$UNIVERSAL_APK" "$NEW_NAME"
           
-          echo "Renamed arm64 APK to: $NEW_ARM64_NAME"
-          echo "Renamed armv7 APK to: $NEW_ARMV7_NAME"
+          echo "Renamed universal APK to: $NEW_NAME"
           
-          echo "ARM64_APK_PATH=$NEW_ARM64_NAME" >> $GITHUB_ENV
-          echo "ARMV7_APK_PATH=$NEW_ARMV7_NAME" >> $GITHUB_ENV
+          echo "UNIVERSAL_APK_PATH=$NEW_NAME" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -127,6 +122,5 @@ jobs:
           name: v${{ env.NEW_VERSION }}
           generate_release_notes: true
           files: |
-            ${{ env.ARM64_APK_PATH }}
-            ${{ env.ARMV7_APK_PATH }}
+            ${{ env.UNIVERSAL_APK_PATH }}
           token: ${{ github.token }}

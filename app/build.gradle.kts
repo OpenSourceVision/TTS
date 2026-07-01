@@ -23,15 +23,6 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  splits {
-    abi {
-      isEnable = true
-      reset()
-      include("arm64-v8a", "armeabi-v7a")
-      isUniversalApk = false
-    }
-  }
-
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
