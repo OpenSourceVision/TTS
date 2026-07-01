@@ -88,29 +88,37 @@ jobs:
             echo "KEYSTORE_PATH=${{ github.workspace }}/my-upload-key.jks" >> $GITHUB_ENV
           fi
 
-      - name: Build Release APK and Bundle (AAB)
+      - name: Build Release APKs
         env:
           KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
           STORE_PASSWORD: ${{ env.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
         run: |
-          gradle assembleRelease bundleRelease
+          gradle assembleRelease
 
-      - name: Locate Build Artifacts
+      - name: Locate and Rename Build Artifacts
         run: |
-          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          AAB_PATH=$(find app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+          ARM64_APK=$(find app/build/outputs/apk/release -name "*arm64-v8a*.apk" | head -n 1)
+          ARMV7_APK=$(find app/build/outputs/apk/release -name "*armeabi-v7a*.apk" | head -n 1)
           
-          if [ -z "$APK_PATH" ] || [ -z "$AAB_PATH" ]; then
+          if [ -z "$ARM64_APK" ] || [ -z "$ARMV7_APK" ]; then
             echo "Build artifacts not found!"
             exit 1
           fi
           
-          echo "Found APK: $APK_PATH"
-          echo "Found AAB: $AAB_PATH"
+          mkdir -p release-artifacts
           
-          echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
-          echo "AAB_PATH=$AAB_PATH" >> $GITHUB_ENV
+          NEW_ARM64_NAME="release-artifacts/TTS-V${{ env.NEW_VERSION }}-arm64-v8a.apk"
+          NEW_ARMV7_NAME="release-artifacts/TTS-V${{ env.NEW_VERSION }}-arm-v7a.apk"
+          
+          cp "$ARM64_APK" "$NEW_ARM64_NAME"
+          cp "$ARMV7_APK" "$NEW_ARMV7_NAME"
+          
+          echo "Renamed arm64 APK to: $NEW_ARM64_NAME"
+          echo "Renamed armv7 APK to: $NEW_ARMV7_NAME"
+          
+          echo "ARM64_APK_PATH=$NEW_ARM64_NAME" >> $GITHUB_ENV
+          echo "ARMV7_APK_PATH=$NEW_ARMV7_NAME" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -119,6 +127,6 @@ jobs:
           name: v${{ env.NEW_VERSION }}
           generate_release_notes: true
           files: |
-            ${{ env.APK_PATH }}
-            ${{ env.AAB_PATH }}
+            ${{ env.ARM64_APK_PATH }}
+            ${{ env.ARMV7_APK_PATH }}
           token: ${{ github.token }}
