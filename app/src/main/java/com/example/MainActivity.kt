@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -31,6 +32,7 @@ import com.example.data.AppDatabase
 import com.example.service.TtsServerService
 import com.example.ui.DashboardScreen
 import com.example.ui.LogsScreen
+import com.example.ui.RulesScreen
 import com.example.ui.SettingsScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.TtsViewModel
@@ -84,7 +86,10 @@ class MainActivity : ComponentActivity() {
                 else -> isSystemInDarkTheme()
             }
 
-            MyApplicationTheme(darkTheme = darkTheme) {
+            MyApplicationTheme(
+                darkTheme = darkTheme,
+                dynamicColor = settings.useDynamicColor
+            ) {
                 var selectedTab by remember { mutableStateOf(0) }
 
                 Scaffold(
@@ -106,6 +111,12 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(
                                 selected = selectedTab == 2,
                                 onClick = { selectedTab = 2 },
+                                icon = { Icon(Icons.Default.Edit, contentDescription = "规则") },
+                                label = { Text("规则") }
+                            )
+                            NavigationBarItem(
+                                selected = selectedTab == 3,
+                                onClick = { selectedTab = 3 },
                                 icon = { Icon(Icons.Default.Settings, contentDescription = "设置") },
                                 label = { Text("设置") }
                             )
@@ -121,7 +132,11 @@ class MainActivity : ComponentActivity() {
                             viewModel = viewModel,
                             modifier = Modifier.padding(innerPadding)
                         )
-                        2 -> SettingsScreen(
+                        2 -> RulesScreen(
+                            viewModel = viewModel,
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                        3 -> SettingsScreen(
                             viewModel = viewModel,
                             modifier = Modifier.padding(innerPadding)
                         )

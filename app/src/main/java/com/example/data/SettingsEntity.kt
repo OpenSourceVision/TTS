@@ -13,5 +13,6 @@ data class SettingsEntity(
     val language: String = "zh",
     val country: String = "CN",
     val autoStartServer: Boolean = true,
-    val themeMode: Int = 0 // 0 = Auto (System), 1 = Light, 2 = Dark
+    val themeMode: Int = 0, // 0 = Auto (System), 1 = Light, 2 = Dark
+    val useDynamicColor: Boolean = true
 )

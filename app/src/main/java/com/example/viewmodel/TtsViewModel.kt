@@ -16,6 +16,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.HistoryEntity
 import com.example.data.SettingsEntity
+import com.example.data.RuleGroupEntity
+import com.example.data.RuleEntity
+import com.example.data.RuleCache
 import com.example.service.TtsServerService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -55,6 +58,20 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             initialValue = emptyList()
         )
 
+    val ruleGroupsState: StateFlow<List<RuleGroupEntity>> = appDao.getAllRuleGroupsFlow()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val rulesState: StateFlow<List<RuleEntity>> = appDao.getAllRulesFlow()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     private val _engines = MutableStateFlow<List<TtsEngineInfo>>(emptyList())
     val engines: StateFlow<List<TtsEngineInfo>> = _engines.asStateFlow()
 
@@ -72,6 +89,35 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             val existing = appDao.getSettings()
             if (existing == null) {
                 appDao.saveSettings(SettingsEntity())
+            }
+            
+            // Populate default rules if there are no rule groups
+            val existingGroups = appDao.getAllRuleGroups()
+            if (existingGroups.isEmpty()) {
+                val group1Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "虫"))
+                appDao.insertRule(
+                    RuleEntity(
+                        groupId = group1Id,
+                        target = "重",
+                        replacement = "虫",
+                        matchWord = "一|二|三|四|五|六|七|八|九|十",
+                        isForwardMatch = true,
+                        isEnabled = true
+                    )
+                )
+                
+                val group2Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "众"))
+                appDao.insertRule(
+                    RuleEntity(
+                        groupId = group2Id,
+                        target = "重",
+                        replacement = "众",
+                        matchWord = "量|要",
+                        isForwardMatch = false,
+                        isEnabled = true
+                    )
+                )
+                RuleCache.clear()
             }
         }
     }
@@ -114,6 +160,50 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            
+            // Apply polyphone rules on the test text with cache!
+            var processedText = RuleCache.get(text)
+            if (processedText == null) {
+                var currentText = text
+                try {
+                    val rules = appDao.getAllRules()
+                    val activeRules = rules.filter { it.isEnabled }
+                    for (rule in activeRules) {
+                        val target = rule.target
+                        val replacement = rule.replacement
+                        val matchWord = rule.matchWord
+                        
+                        if (target.isEmpty()) continue
+                        
+                        if (matchWord.isNotEmpty()) {
+                            if (rule.isForwardMatch) {
+                                val regexStr = "(" + matchWord + ")" + java.util.regex.Pattern.quote(target)
+                                try {
+                                    val regex = java.util.regex.Pattern.compile(regexStr)
+                                    currentText = regex.matcher(currentText).replaceAll("$1" + java.util.regex.Matcher.quoteReplacement(replacement))
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            } else {
+                                val regexStr = java.util.regex.Pattern.quote(target) + "(" + matchWord + ")"
+                                try {
+                                    val regex = java.util.regex.Pattern.compile(regexStr)
+                                    currentText = regex.matcher(currentText).replaceAll(java.util.regex.Matcher.quoteReplacement(replacement) + "$1")
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+                        } else {
+                            currentText = currentText.replace(target, replacement)
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                processedText = currentText
+                RuleCache.put(text, processedText)
+            }
+
             testTts = TextToSpeech(context, { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     val tts = testTts
@@ -162,7 +252,7 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
                                 }
                             }
                         })
-                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "test_utterance")
+                        tts.speak(processedText, TextToSpeech.QUEUE_FLUSH, null, "test_utterance")
                     }
                 } else {
                     viewModelScope.launch {
@@ -203,8 +293,8 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             
             val json = """
             {
-              "name": "TTS转发 [跟随App选择]",
-              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}&rate={{speakSpeed}}",
+              "name": "TTS转发",
+              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}",
               "contentType": "audio/wav",
               "id": ${System.currentTimeMillis()}
             }
@@ -213,7 +303,7 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("Legado TTS Config", json)
             clipboard.setPrimaryClip(clip)
-            _toastEvent.emit("Legado配置已复制到剪贴板，可在阅读App中一键导入。")
+            _toastEvent.emit("已复制到剪切板")
         }
     }
 
@@ -224,8 +314,8 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             
             val json = """
             {
-              "name": "TTS转发 [跟随App选择]",
-              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}&rate={{speakSpeed}}",
+              "name": "TTS转发",
+              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}",
               "contentType": "audio/wav",
               "id": ${System.currentTimeMillis()}
             }
@@ -388,6 +478,212 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
         } else {
             viewModelScope.launch {
                 _toastEvent.emit("当前系统版本无需手动配置电池优化")
+            }
+        }
+    }
+
+    fun addRuleGroup(name: String, replacement: String) {
+        viewModelScope.launch {
+            if (name.isBlank()) {
+                _toastEvent.emit("分组名称不能为空")
+                return@launch
+            }
+            appDao.insertRuleGroup(RuleGroupEntity(name = name, replacement = replacement))
+            RuleCache.clear()
+            _toastEvent.emit("新增分组 '$name' 成功")
+        }
+    }
+
+    fun updateRuleGroup(groupId: Long, name: String, replacement: String) {
+        viewModelScope.launch {
+            if (name.isBlank()) {
+                _toastEvent.emit("分组名称不能为空")
+                return@launch
+            }
+            val existing = appDao.getAllRuleGroups().find { it.id == groupId }
+            if (existing != null) {
+                appDao.insertRuleGroup(existing.copy(name = name, replacement = replacement))
+                
+                // Keep rule targets in sync if they matched the old group name
+                val rules = appDao.getRulesForGroup(groupId)
+                for (rule in rules) {
+                    if (rule.target == existing.name) {
+                        appDao.insertRule(rule.copy(target = name))
+                    }
+                }
+                
+                RuleCache.clear()
+                _toastEvent.emit("修改分组成功")
+            }
+        }
+    }
+
+    fun deleteRuleGroup(groupId: Long) {
+        viewModelScope.launch {
+            appDao.deleteRuleGroupById(groupId)
+            appDao.deleteRulesByGroupId(groupId)
+            RuleCache.clear()
+            _toastEvent.emit("已删除该分组及其全部规则")
+        }
+    }
+
+    fun addRule(groupId: Long, target: String, replacement: String, matchWord: String, isForwardMatch: Boolean) {
+        viewModelScope.launch {
+            if (target.isBlank() || replacement.isBlank()) {
+                _toastEvent.emit("目标字与替换字不能为空")
+                return@launch
+            }
+            appDao.insertRule(
+                RuleEntity(
+                    groupId = groupId,
+                    target = target,
+                    replacement = replacement,
+                    matchWord = matchWord,
+                    isForwardMatch = isForwardMatch
+                )
+            )
+            RuleCache.clear()
+            _toastEvent.emit("新增规则成功")
+        }
+    }
+
+    fun updateRule(ruleId: Long, replacement: String, matchWord: String, isForwardMatch: Boolean) {
+        viewModelScope.launch {
+            if (replacement.isBlank()) {
+                _toastEvent.emit("替换字不能为空")
+                return@launch
+            }
+            val allRules = appDao.getAllRules()
+            val existing = allRules.find { it.id == ruleId }
+            if (existing != null) {
+                appDao.insertRule(
+                    existing.copy(
+                        replacement = replacement,
+                        matchWord = matchWord,
+                        isForwardMatch = isForwardMatch
+                    )
+                )
+                RuleCache.clear()
+                _toastEvent.emit("修改规则成功")
+            }
+        }
+    }
+
+    fun deleteRule(ruleId: Long) {
+        viewModelScope.launch {
+            appDao.deleteRuleById(ruleId)
+            RuleCache.clear()
+            _toastEvent.emit("删除规则成功")
+        }
+    }
+
+    fun toggleRuleEnabled(rule: RuleEntity) {
+        viewModelScope.launch {
+            appDao.insertRule(rule.copy(isEnabled = !rule.isEnabled))
+            RuleCache.clear()
+            _toastEvent.emit("规则状态已更新")
+        }
+    }
+
+    suspend fun exportRulesToJsonString(): String {
+        return withContext(Dispatchers.IO) {
+            try {
+                val groups = appDao.getAllRuleGroups()
+                val allRules = appDao.getAllRules()
+                
+                val jsonArray = org.json.JSONArray()
+                for (group in groups) {
+                    val groupObj = org.json.JSONObject()
+                    groupObj.put("groupName", group.name)
+                    groupObj.put("groupReplacement", group.replacement)
+                    
+                    val rulesArray = org.json.JSONArray()
+                    val groupRules = allRules.filter { it.groupId == group.id }
+                    for (rule in groupRules) {
+                        val ruleObj = org.json.JSONObject()
+                        ruleObj.put("target", rule.target)
+                        ruleObj.put("replacement", rule.replacement)
+                        ruleObj.put("matchWord", rule.matchWord)
+                        ruleObj.put("isForwardMatch", rule.isForwardMatch)
+                        ruleObj.put("isEnabled", rule.isEnabled)
+                        rulesArray.put(ruleObj)
+                    }
+                    groupObj.put("rules", rulesArray)
+                    jsonArray.put(groupObj)
+                }
+                jsonArray.toString(2)
+            } catch (e: Exception) {
+                ""
+            }
+        }
+    }
+
+    fun importRulesFromJson(jsonStr: String, onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (jsonStr.isBlank()) {
+                    withContext(Dispatchers.Main) { onComplete(false) }
+                    return@launch
+                }
+                val jsonArray = org.json.JSONArray(jsonStr)
+                for (i in 0 until jsonArray.length()) {
+                    val groupObj = jsonArray.getJSONObject(i)
+                    val groupName = groupObj.getString("groupName")
+                    val groupReplacement = groupObj.optString("groupReplacement", "")
+                    
+                    val existingGroups = appDao.getAllRuleGroups()
+                    var groupId = existingGroups.find { it.name == groupName }?.id
+                    if (groupId == null) {
+                        groupId = appDao.insertRuleGroup(RuleGroupEntity(name = groupName, replacement = groupReplacement))
+                    } else if (groupReplacement.isNotEmpty()) {
+                        // Update existing group replacement if imported json has it and existing does not
+                        val existingGroup = existingGroups.find { it.id == groupId }
+                        if (existingGroup != null && existingGroup.replacement.isEmpty()) {
+                            appDao.insertRuleGroup(existingGroup.copy(replacement = groupReplacement))
+                        }
+                    }
+                    
+                    val rulesArray = groupObj.optJSONArray("rules") ?: org.json.JSONArray()
+                    for (j in 0 until rulesArray.length()) {
+                        val ruleObj = rulesArray.getJSONObject(j)
+                        val target = ruleObj.getString("target")
+                        val replacement = ruleObj.getString("replacement")
+                        val matchWord = ruleObj.optString("matchWord", "")
+                        val isForwardMatch = ruleObj.optBoolean("isForwardMatch", true)
+                        val isEnabled = ruleObj.optBoolean("isEnabled", true)
+                        
+                        val existingRules = appDao.getRulesForGroup(groupId)
+                        val duplicate = existingRules.any { 
+                            it.target == target && 
+                            it.replacement == replacement && 
+                            it.matchWord == matchWord && 
+                            it.isForwardMatch == isForwardMatch 
+                        }
+                        if (!duplicate) {
+                            appDao.insertRule(
+                                RuleEntity(
+                                    groupId = groupId,
+                                    target = target,
+                                    replacement = replacement,
+                                    matchWord = matchWord,
+                                    isForwardMatch = isForwardMatch,
+                                    isEnabled = isEnabled
+                                )
+                            )
+                        }
+                    }
+                }
+                RuleCache.clear()
+                withContext(Dispatchers.Main) {
+                    onComplete(true)
+                }
+                _toastEvent.emit("导入规则成功")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    onComplete(false)
+                }
+                _toastEvent.emit("导入规则失败: 格式错误")
             }
         }
     }

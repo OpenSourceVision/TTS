@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -206,6 +208,76 @@ fun DashboardScreen(
                 Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Speech Rate Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "语速设置",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "当前语速: ${String.format("%.1f", settings.speechRate)}x",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    var rateInputInternal by remember { mutableStateOf(String.format(java.util.Locale.US, "%.1f", settings.speechRate)) }
+                    var isEditingRate by remember { mutableStateOf(false) }
+
+                    if (isEditingRate) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = rateInputInternal,
+                                onValueChange = { input ->
+                                    rateInputInternal = input.filter { char -> char.isDigit() || char == '.' }
+                                },
+                                modifier = Modifier
+                                    .width(90.dp)
+                                    .testTag("rate_input"),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(
+                                onClick = {
+                                    val newRate = rateInputInternal.toFloatOrNull() ?: 1.0f
+                                    val roundedRate = Math.round(newRate * 10f) / 10f
+                                    viewModel.updateSettings(settings.copy(speechRate = roundedRate.coerceIn(0.1f, 4.0f)))
+                                    isEditingRate = false
+                                },
+                                modifier = Modifier.testTag("save_rate_button")
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = "保存", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    } else {
+                        IconButton(
+                            onClick = {
+                                rateInputInternal = String.format(java.util.Locale.US, "%.1f", settings.speechRate)
+                                isEditingRate = true
+                            },
+                            modifier = Modifier.testTag("edit_rate_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "修改语速",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Port Selection / Setting
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -252,16 +324,19 @@ fun DashboardScreen(
                             }
                         }
                     } else {
-                        OutlinedButton(
+                        IconButton(
                             onClick = {
                                 portInputInternal = settings.port.toString()
                                 isEditingPort = true
                             },
                             modifier = Modifier.testTag("edit_port_button")
                         ) {
-                            Icon(Icons.Default.Settings, contentDescription = "修改端口", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("修改")
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "修改端口",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
                 }
@@ -277,13 +352,49 @@ fun DashboardScreen(
             )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "测试朗读",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "测试朗读",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    if (isTesting) {
+                        IconButton(
+                            onClick = {
+                                viewModel.stopTest()
+                            },
+                            modifier = Modifier.testTag("stop_test_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "停止",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    } else {
+                        IconButton(
+                            onClick = {
+                                viewModel.playTest(context, testText, settings.targetEnginePackage, settings.speechRate, settings.pitch)
+                            },
+                            modifier = Modifier.testTag("start_test_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "播放",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(
                     value = testText,
@@ -295,38 +406,6 @@ fun DashboardScreen(
                         .testTag("test_text_field"),
                     maxLines = 3
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    if (isTesting) {
-                        Button(
-                            onClick = {
-                                viewModel.stopTest()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                            modifier = Modifier.testTag("stop_test_button")
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = "停止")
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("停止测试")
-                        }
-                    } else {
-                        Button(
-                            onClick = {
-                                viewModel.playTest(context, testText, settings.targetEnginePackage, settings.speechRate, settings.pitch)
-                            },
-                            modifier = Modifier.testTag("start_test_button")
-                        ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "播放")
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("开始测试")
-                        }
-                    }
-                }
             }
         }
 
@@ -335,24 +414,23 @@ fun DashboardScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "阅读联动",
+                    text = "TTS转发",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Button(
+                    OutlinedButton(
                         onClick = { viewModel.copyLegadoConfig(context) },
                         modifier = Modifier
                             .weight(1f)
@@ -363,7 +441,7 @@ fun DashboardScreen(
                         Text("复制配置")
                     }
 
-                    Button(
+                    OutlinedButton(
                         onClick = { viewModel.importToLegado(context) },
                         modifier = Modifier
                             .weight(1f)

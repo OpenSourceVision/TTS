@@ -17,6 +17,7 @@ import com.example.MainActivity
 import com.example.data.AppDatabase
 import com.example.data.HistoryEntity
 import com.example.data.SettingsEntity
+import com.example.data.RuleCache
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -265,6 +266,11 @@ class TtsServerService : Service() {
             }
 
             val db = AppDatabase.getDatabase(applicationContext)
+            
+            // Apply polyphone replacement rules
+            val originalText = text
+            text = processTextRules(originalText, db)
+
             val settings = db.appDao().getSettings() ?: SettingsEntity()
 
             val rawRateStr = params["rate"] ?: params["speed"] ?: params["speakSpeed"] ?: params["speechRate"] ?: params["r"] ?: params["s"]
@@ -283,7 +289,7 @@ class TtsServerService : Service() {
 
             if (audioFile != null && audioFile.exists()) {
                 val duration = System.currentTimeMillis() - startTime
-                logToDatabase(text, enginePackage, "SUCCESS", duration)
+                logToDatabase(originalText, enginePackage, "SUCCESS", duration)
 
                 val fileLen = audioFile.length()
                 val header = "HTTP/1.1 200 OK\r\n" +
@@ -597,5 +603,51 @@ class TtsServerService : Service() {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "停止服务", stopPendingIntent)
             .setOngoing(true)
             .build()
+    }
+
+    private suspend fun processTextRules(originalText: String, db: AppDatabase): String {
+        val cached = RuleCache.get(originalText)
+        if (cached != null) {
+            return cached
+        }
+
+        var processed = originalText
+        try {
+            val rules = db.appDao().getAllRules()
+            val activeRules = rules.filter { it.isEnabled }
+            for (rule in activeRules) {
+                val target = rule.target
+                val replacement = rule.replacement
+                val matchWord = rule.matchWord
+                
+                if (target.isEmpty()) continue
+                
+                if (matchWord.isNotEmpty()) {
+                    if (rule.isForwardMatch) {
+                        val regexStr = "(" + matchWord + ")" + java.util.regex.Pattern.quote(target)
+                        try {
+                            val regex = java.util.regex.Pattern.compile(regexStr)
+                            processed = regex.matcher(processed).replaceAll("$1" + java.util.regex.Matcher.quoteReplacement(replacement))
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    } else {
+                        val regexStr = java.util.regex.Pattern.quote(target) + "(" + matchWord + ")"
+                        try {
+                            val regex = java.util.regex.Pattern.compile(regexStr)
+                            processed = regex.matcher(processed).replaceAll(java.util.regex.Matcher.quoteReplacement(replacement) + "$1")
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                } else {
+                    processed = processed.replace(target, replacement)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        RuleCache.put(originalText, processed)
+        return processed
     }
 }
