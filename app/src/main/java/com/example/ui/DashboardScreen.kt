@@ -107,11 +107,7 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // App Header
-        AppHeader(
-            onRefreshEngines = {
-                viewModel.loadEngines(context)
-            }
-        )
+        AppHeader()
 
         // Server Status Card
         ServerStatusCard(
@@ -138,12 +134,30 @@ fun DashboardScreen(
             )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "引擎选择",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "引擎选择",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    IconButton(
+                        onClick = { viewModel.loadEngines(context) },
+                        modifier = Modifier.testTag("refresh_engines_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "刷新系统TTS引擎",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Engine Dropdown Selector
@@ -458,7 +472,7 @@ fun DashboardScreen(
 }
 
 @Composable
-fun AppHeader(onRefreshEngines: () -> Unit) {
+fun AppHeader() {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -471,15 +485,6 @@ fun AppHeader(onRefreshEngines: () -> Unit) {
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary
             )
-        }
-
-        IconButton(
-            onClick = onRefreshEngines,
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-                .testTag("refresh_engines_button")
-        ) {
-            Icon(Icons.Default.Refresh, contentDescription = "刷新系统TTS引擎")
         }
     }
 }

@@ -222,6 +222,22 @@ fun RulesScreen(
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Add Group Button
+                IconButton(
+                    onClick = {
+                        groupNameInput = ""
+                        groupReplacementInput = ""
+                        showAddGroupDialog = true
+                    },
+                    modifier = Modifier.testTag("add_group_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "新增分组",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 // Sort Menu
                 Box {
                     IconButton(onClick = { showSortMenu = true }) {
@@ -273,15 +289,6 @@ fun RulesScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("新增分组") },
-                            onClick = {
-                                showMenu = false
-                                groupNameInput = ""
-                                groupReplacementInput = ""
-                                showAddGroupDialog = true
-                            }
-                        )
                         DropdownMenuItem(
                             text = { Text("导入规则") },
                             onClick = {
