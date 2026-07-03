@@ -143,12 +143,6 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
     fun updateSettings(settings: SettingsEntity) {
         viewModelScope.launch {
             appDao.saveSettings(settings)
-            
-            // If server is running, restart it to apply new settings
-            if (TtsServerService.isServerRunning.value) {
-                // Restart service
-                val context = database.appDao().getSettings() // dummy context usage or pass context, but we will call from UI or restart manually
-            }
         }
     }
 
