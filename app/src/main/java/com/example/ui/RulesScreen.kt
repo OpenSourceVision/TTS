@@ -28,10 +28,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
@@ -125,12 +127,28 @@ fun RulesScreen(
     var currentSortType by remember { mutableStateOf(RuleSortType.DEFAULT) }
     var showSortMenu by remember { mutableStateOf(false) }
 
-    val sortedRuleGroups = remember(ruleGroups, rules, currentSortType) {
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+
+    val sortedRuleGroups = remember(ruleGroups, rules, currentSortType, searchQuery) {
+        val filtered = if (searchQuery.isBlank()) {
+            ruleGroups
+        } else {
+            ruleGroups.filter { group ->
+                val groupRules = rules.filter { it.groupId == group.id }
+                group.name.contains(searchQuery, ignoreCase = true) ||
+                        group.replacement.contains(searchQuery, ignoreCase = true) ||
+                        groupRules.any { rule ->
+                            rule.matchWord.contains(searchQuery, ignoreCase = true) ||
+                                    rule.replacement.contains(searchQuery, ignoreCase = true)
+                        }
+            }
+        }
         when (currentSortType) {
-            RuleSortType.DEFAULT -> ruleGroups
-            RuleSortType.NAME_ASC -> ruleGroups.sortedBy { it.name }
-            RuleSortType.NAME_DESC -> ruleGroups.sortedByDescending { it.name }
-            RuleSortType.RULE_COUNT_DESC -> ruleGroups.sortedByDescending { group ->
+            RuleSortType.DEFAULT -> filtered
+            RuleSortType.NAME_ASC -> filtered.sortedBy { it.name }
+            RuleSortType.NAME_DESC -> filtered.sortedByDescending { it.name }
+            RuleSortType.RULE_COUNT_DESC -> filtered.sortedByDescending { group ->
                 rules.count { it.groupId == group.id }
             }
         }
@@ -208,35 +226,78 @@ fun RulesScreen(
             .padding(16.dp)
     ) {
         // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "规则",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Add Group Button
-                IconButton(
-                    onClick = {
-                        groupNameInput = ""
-                        groupReplacementInput = ""
-                        showAddGroupDialog = true
-                    },
-                    modifier = Modifier.testTag("add_group_button")
-                ) {
+        if (isSearchActive) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("rule_search_input"),
+                placeholder = { Text("搜索目标字、匹配词或替换字...") },
+                leadingIcon = {
                     Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "新增分组",
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "搜索",
                         tint = MaterialTheme.colorScheme.primary
                     )
+                },
+                trailingIcon = {
+                    IconButton(onClick = {
+                        searchQuery = ""
+                        isSearchActive = false
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "关闭搜索",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "规则",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Search Button
+                    IconButton(
+                        onClick = { isSearchActive = true },
+                        modifier = Modifier.testTag("search_toggle_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "搜索规则",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Add Group Button
+                    IconButton(
+                        onClick = {
+                            groupNameInput = ""
+                            groupReplacementInput = ""
+                            showAddGroupDialog = true
+                        },
+                        modifier = Modifier.testTag("add_group_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "新增分组",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
                 // Sort Menu
                 Box {
@@ -311,6 +372,7 @@ fun RulesScreen(
                 }
             }
         }
+    }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -363,7 +425,19 @@ fun RulesScreen(
             ) {
                 items(sortedRuleGroups, key = { it.id }) { group ->
                     val groupRules = rules.filter { it.groupId == group.id }
-                    val isExpanded = expandedGroupIds.contains(group.id)
+                    val displayRules = remember(groupRules, searchQuery) {
+                        if (searchQuery.isBlank()) {
+                            groupRules
+                        } else {
+                            groupRules.filter { rule ->
+                                rule.matchWord.contains(searchQuery, ignoreCase = true) ||
+                                        rule.replacement.contains(searchQuery, ignoreCase = true) ||
+                                        group.name.contains(searchQuery, ignoreCase = true) ||
+                                        group.replacement.contains(searchQuery, ignoreCase = true)
+                            }
+                        }
+                    }
+                    val isExpanded = expandedGroupIds.contains(group.id) || searchQuery.isNotEmpty()
                     
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -459,7 +533,7 @@ fun RulesScreen(
 
                             // Only show body if group is expanded
                             if (isExpanded) {
-                                if (groupRules.isNotEmpty()) {
+                                if (displayRules.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -467,7 +541,7 @@ fun RulesScreen(
                                     Column(
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        groupRules.forEach { rule ->
+                                        displayRules.forEach { rule ->
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -542,7 +616,7 @@ fun RulesScreen(
                                 } else {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = "字组内暂无匹配规则，点击右上角加号新增规则",
+                                        text = if (searchQuery.isNotEmpty()) "未找到匹配的规则" else "字组内暂无匹配规则，点击右上角加号新增规则",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                         modifier = Modifier.fillMaxWidth(),
