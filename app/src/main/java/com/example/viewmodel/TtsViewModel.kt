@@ -626,25 +626,19 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
                     return@launch
                 }
                 val jsonArray = org.json.JSONArray(jsonStr)
-                for (i in 0 until jsonArray.length()) {
+                for (i in (jsonArray.length() - 1) downTo 0) {
                     val groupObj = jsonArray.getJSONObject(i)
                     val groupName = groupObj.getString("groupName")
                     val groupReplacement = groupObj.optString("groupReplacement", "")
                     
                     val existingGroups = appDao.getAllRuleGroups()
-                    var groupId = existingGroups.find { it.name == groupName }?.id
+                    var groupId = existingGroups.find { it.name == groupName && it.replacement == groupReplacement }?.id
                     if (groupId == null) {
                         groupId = appDao.insertRuleGroup(RuleGroupEntity(name = groupName, replacement = groupReplacement))
-                    } else if (groupReplacement.isNotEmpty()) {
-                        // Update existing group replacement if imported json has it and existing does not
-                        val existingGroup = existingGroups.find { it.id == groupId }
-                        if (existingGroup != null && existingGroup.replacement.isEmpty()) {
-                            appDao.insertRuleGroup(existingGroup.copy(replacement = groupReplacement))
-                        }
                     }
                     
                     val rulesArray = groupObj.optJSONArray("rules") ?: org.json.JSONArray()
-                    for (j in 0 until rulesArray.length()) {
+                    for (j in (rulesArray.length() - 1) downTo 0) {
                         val ruleObj = rulesArray.getJSONObject(j)
                         val target = ruleObj.getString("target")
                         val replacement = ruleObj.getString("replacement")

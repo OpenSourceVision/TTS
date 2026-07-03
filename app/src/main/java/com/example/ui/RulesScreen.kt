@@ -1104,7 +1104,9 @@ fun RulesScreen(
 
                         Button(
                             onClick = {
-                                fileExportLauncher.launch("TTS_Rules_${System.currentTimeMillis() / 1000}.json")
+                                val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.getDefault())
+                                val formattedDate = sdf.format(java.util.Date())
+                                fileExportLauncher.launch("TTS_Rules_$formattedDate.json")
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
