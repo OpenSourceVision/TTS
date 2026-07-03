@@ -19,6 +19,7 @@ import com.example.data.SettingsEntity
 import com.example.data.RuleGroupEntity
 import com.example.data.RuleEntity
 import com.example.data.RuleCache
+import com.example.data.TextRuleProcessor
 import com.example.service.TtsServerService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -162,47 +163,7 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             }
             
             // Apply polyphone rules on the test text with cache!
-            var processedText = RuleCache.get(text)
-            if (processedText == null) {
-                var currentText = text
-                try {
-                    val rules = appDao.getAllRules()
-                    val activeRules = rules.filter { it.isEnabled }
-                    for (rule in activeRules) {
-                        val target = rule.target
-                        val replacement = rule.replacement
-                        val matchWord = rule.matchWord
-                        
-                        if (target.isEmpty()) continue
-                        
-                        if (matchWord.isNotEmpty()) {
-                            if (rule.isForwardMatch) {
-                                val regexStr = "(" + matchWord + ")" + java.util.regex.Pattern.quote(target)
-                                try {
-                                    val regex = java.util.regex.Pattern.compile(regexStr)
-                                    currentText = regex.matcher(currentText).replaceAll("$1" + java.util.regex.Matcher.quoteReplacement(replacement))
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                }
-                            } else {
-                                val regexStr = java.util.regex.Pattern.quote(target) + "(" + matchWord + ")"
-                                try {
-                                    val regex = java.util.regex.Pattern.compile(regexStr)
-                                    currentText = regex.matcher(currentText).replaceAll(java.util.regex.Matcher.quoteReplacement(replacement) + "$1")
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                }
-                            }
-                        } else {
-                            currentText = currentText.replace(target, replacement)
-                        }
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                processedText = currentText
-                RuleCache.put(text, processedText)
-            }
+            val processedText = TextRuleProcessor.process(text, appDao)
 
             testTts = TextToSpeech(context, { status ->
                 if (status == TextToSpeech.SUCCESS) {

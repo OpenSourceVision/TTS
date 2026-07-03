@@ -19,6 +19,7 @@ import com.example.data.HistoryEntity
 import com.example.data.SettingsEntity
 import com.example.data.RuleCache
 import com.example.data.RulePatternCache
+import com.example.data.TextRuleProcessor
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.BufferedOutputStream
 import java.io.BufferedReader
@@ -50,6 +53,7 @@ class TtsServerService : Service() {
     private var activeTts: TextToSpeech? = null
     private var activeEnginePackage: String? = null
     private val synthesisMutex = Mutex()
+    private val requestSemaphore = Semaphore(4)
 
     companion object {
         private const val CHANNEL_ID = "TtsServerChannel"
@@ -156,7 +160,13 @@ class TtsServerService : Service() {
                     try {
                         val client = socket.accept()
                         serviceScope.launch(Dispatchers.IO) {
-                            handleClient(client)
+                            try {
+                                requestSemaphore.withPermit {
+                                    handleClient(client)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
                         }
                     } catch (e: Exception) {
                         // socket closed or error
@@ -238,6 +248,12 @@ class TtsServerService : Service() {
                 if (lower.startsWith("content-length:")) {
                     contentLength = lower.substringAfter("content-length:").trim().toIntOrNull() ?: 0
                 }
+            }
+
+            if (contentLength > 65536) {
+                sendErrorResponse(output, 400, "Request Body Too Large (Max 64KB)")
+                client.close()
+                return
             }
 
             var requestBody = ""
@@ -619,48 +635,6 @@ class TtsServerService : Service() {
     }
 
     private suspend fun processTextRules(originalText: String, db: AppDatabase): String {
-        val cached = RuleCache.get(originalText)
-        if (cached != null) {
-            return cached
-        }
-
-        var processed = originalText
-        try {
-            val rules = db.appDao().getAllRules()
-            val activeRules = rules.filter { it.isEnabled }
-            for (rule in activeRules) {
-                val target = rule.target
-                val replacement = rule.replacement
-                val matchWord = rule.matchWord
-                
-                if (target.isEmpty()) continue
-                
-                if (matchWord.isNotEmpty()) {
-                    if (rule.isForwardMatch) {
-                        val regexStr = "(" + matchWord + ")" + java.util.regex.Pattern.quote(target)
-                        try {
-                            val regex = RulePatternCache.getOrCompile(regexStr)
-                            processed = regex.matcher(processed).replaceAll("$1" + java.util.regex.Matcher.quoteReplacement(replacement))
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    } else {
-                        val regexStr = java.util.regex.Pattern.quote(target) + "(" + matchWord + ")"
-                        try {
-                            val regex = RulePatternCache.getOrCompile(regexStr)
-                            processed = regex.matcher(processed).replaceAll(java.util.regex.Matcher.quoteReplacement(replacement) + "$1")
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    }
-                } else {
-                    processed = processed.replace(target, replacement)
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        RuleCache.put(originalText, processed)
-        return processed
+        return TextRuleProcessor.process(originalText, db.appDao())
     }
 }
