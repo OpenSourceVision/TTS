@@ -23,6 +23,7 @@ import com.example.data.TextRuleProcessor
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +55,7 @@ class TtsServerService : Service() {
     private var activeEnginePackage: String? = null
     private val synthesisMutex = Mutex()
     private val requestSemaphore = Semaphore(4)
+    private var settingsJob: Job? = null
 
     companion object {
         private const val CHANNEL_ID = "TtsServerChannel"
@@ -80,12 +82,15 @@ class TtsServerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: ACTION_START_SERVER
         if (action == ACTION_STOP_SERVER) {
+            settingsJob?.cancel()
+            settingsJob = null
             stopServer()
             stopSelf()
             return START_NOT_STICKY
         }
 
-        serviceScope.launch {
+        settingsJob?.cancel()
+        settingsJob = serviceScope.launch {
             val db = AppDatabase.getDatabase(applicationContext)
             db.appDao().getSettingsFlow().collect { settingsOpt ->
                 val settings = settingsOpt ?: SettingsEntity()
