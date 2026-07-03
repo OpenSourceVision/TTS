@@ -18,9 +18,14 @@ object TextRuleProcessor {
                 
                 if (target.isEmpty()) continue
                 
-                if (matchWord.isNotEmpty()) {
+                val sanitizedMatchWord = matchWord.split("|")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .joinToString("|")
+                
+                if (sanitizedMatchWord.isNotEmpty()) {
                     if (rule.isForwardMatch) {
-                        val regexStr = "(" + matchWord + ")" + java.util.regex.Pattern.quote(target)
+                        val regexStr = "(" + sanitizedMatchWord + ")" + java.util.regex.Pattern.quote(target)
                         try {
                             val regex = RulePatternCache.getOrCompile(regexStr)
                             processed = regex.matcher(processed).replaceAll("$1" + java.util.regex.Matcher.quoteReplacement(replacement))
@@ -28,7 +33,7 @@ object TextRuleProcessor {
                             e.printStackTrace()
                         }
                     } else {
-                        val regexStr = java.util.regex.Pattern.quote(target) + "(" + matchWord + ")"
+                        val regexStr = java.util.regex.Pattern.quote(target) + "(" + sanitizedMatchWord + ")"
                         try {
                             val regex = RulePatternCache.getOrCompile(regexStr)
                             processed = regex.matcher(processed).replaceAll(java.util.regex.Matcher.quoteReplacement(replacement) + "$1")
