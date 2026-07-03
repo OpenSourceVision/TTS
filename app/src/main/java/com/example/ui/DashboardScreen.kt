@@ -117,7 +117,7 @@ fun DashboardScreen(
                 val intent = Intent(context, TtsServerService::class.java).apply {
                     action = if (shouldStart) TtsServerService.ACTION_START_SERVER else TtsServerService.ACTION_STOP_SERVER
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (shouldStart && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
                     context.startService(intent)
