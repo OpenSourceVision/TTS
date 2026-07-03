@@ -16,5 +16,21 @@ object RuleCache {
 
     fun clear() {
         cache.clear()
+        RulePatternCache.clear()
     }
 }
+
+object RulePatternCache {
+    private val cache = ConcurrentHashMap<String, java.util.regex.Pattern>()
+
+    fun getOrCompile(regexStr: String): java.util.regex.Pattern {
+        return cache.getOrPut(regexStr) {
+            java.util.regex.Pattern.compile(regexStr)
+        }
+    }
+
+    fun clear() {
+        cache.clear()
+    }
+}
+

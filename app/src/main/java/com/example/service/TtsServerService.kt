@@ -18,6 +18,7 @@ import com.example.data.AppDatabase
 import com.example.data.HistoryEntity
 import com.example.data.SettingsEntity
 import com.example.data.RuleCache
+import com.example.data.RulePatternCache
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -185,10 +186,37 @@ class TtsServerService : Service() {
         var enginePackage = ""
         try {
             client.soTimeout = 8000 // Set an 8-second socket timeout to prevent connection hanging
-            val reader = BufferedReader(InputStreamReader(client.getInputStream()))
+            val inputStream = client.getInputStream()
             val output = BufferedOutputStream(client.getOutputStream())
 
-            val reqLine = reader.readLine() ?: return
+            // Read the header section byte-by-byte up to \r\n\r\n or \n\n
+            val headerBytes = java.io.ByteArrayOutputStream()
+            var b: Int
+            while (true) {
+                b = inputStream.read()
+                if (b == -1) break
+                headerBytes.write(b)
+                val bytes = headerBytes.toByteArray()
+                val size = bytes.size
+                if (size >= 4 &&
+                    bytes[size - 4] == '\r'.code.toByte() && bytes[size - 3] == '\n'.code.toByte() &&
+                    bytes[size - 2] == '\r'.code.toByte() && bytes[size - 1] == '\n'.code.toByte()) {
+                    break
+                }
+                if (size >= 2 &&
+                    bytes[size - 2] == '\n'.code.toByte() && bytes[size - 1] == '\n'.code.toByte()) {
+                    break
+                }
+            }
+
+            val headerStr = headerBytes.toString("US-ASCII")
+            val lines = headerStr.split(Regex("\r?\n"))
+            if (lines.isEmpty() || lines[0].isBlank()) {
+                client.close()
+                return
+            }
+
+            val reqLine = lines[0]
             val parts = reqLine.split(" ")
             if (parts.size < 2) {
                 sendErrorResponse(output, 400, "Bad Request")
@@ -204,12 +232,8 @@ class TtsServerService : Service() {
             }
 
             var contentLength = 0
-            var headerLine: String?
-            while (true) {
-                headerLine = reader.readLine()
-                if (headerLine.isNullOrEmpty()) {
-                    break
-                }
+            for (i in 1 until lines.size) {
+                val headerLine = lines[i]
                 val lower = headerLine.lowercase(Locale.US)
                 if (lower.startsWith("content-length:")) {
                     contentLength = lower.substringAfter("content-length:").trim().toIntOrNull() ?: 0
@@ -218,14 +242,14 @@ class TtsServerService : Service() {
 
             var requestBody = ""
             if (contentLength > 0) {
-                val bodyChars = CharArray(contentLength)
+                val bodyBytes = ByteArray(contentLength)
                 var totalRead = 0
                 while (totalRead < contentLength) {
-                    val read = reader.read(bodyChars, totalRead, contentLength - totalRead)
+                    val read = inputStream.read(bodyBytes, totalRead, contentLength - totalRead)
                     if (read == -1) break
                     totalRead += read
                 }
-                requestBody = String(bodyChars, 0, totalRead)
+                requestBody = String(bodyBytes, 0, totalRead, Charsets.UTF_8)
             }
 
             val uriStr = parts[1]
@@ -500,17 +524,6 @@ class TtsServerService : Service() {
         }
 
         if (status == TextToSpeech.SUCCESS) {
-            try {
-                val result = tts.setLanguage(Locale.SIMPLIFIED_CHINESE)
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    val result2 = tts.setLanguage(Locale.CHINESE)
-                    if (result2 == TextToSpeech.LANG_MISSING_DATA || result2 == TextToSpeech.LANG_NOT_SUPPORTED) {
-                        tts.setLanguage(Locale.getDefault())
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
             activeTts = tts
             activeEnginePackage = if (isFallback) (tts.defaultEngine ?: enginePackage) else enginePackage
             tts
@@ -626,7 +639,7 @@ class TtsServerService : Service() {
                     if (rule.isForwardMatch) {
                         val regexStr = "(" + matchWord + ")" + java.util.regex.Pattern.quote(target)
                         try {
-                            val regex = java.util.regex.Pattern.compile(regexStr)
+                            val regex = RulePatternCache.getOrCompile(regexStr)
                             processed = regex.matcher(processed).replaceAll("$1" + java.util.regex.Matcher.quoteReplacement(replacement))
                         } catch (e: Exception) {
                             e.printStackTrace()
@@ -634,7 +647,7 @@ class TtsServerService : Service() {
                     } else {
                         val regexStr = java.util.regex.Pattern.quote(target) + "(" + matchWord + ")"
                         try {
-                            val regex = java.util.regex.Pattern.compile(regexStr)
+                            val regex = RulePatternCache.getOrCompile(regexStr)
                             processed = regex.matcher(processed).replaceAll(java.util.regex.Matcher.quoteReplacement(replacement) + "$1")
                         } catch (e: Exception) {
                             e.printStackTrace()

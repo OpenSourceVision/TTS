@@ -21,7 +21,16 @@ interface AppDao {
     fun getHistoryFlow(): Flow<List<HistoryEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertHistory(history: HistoryEntity)
+    suspend fun insertHistoryRaw(history: HistoryEntity)
+
+    @Query("DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY timestamp DESC LIMIT 500)")
+    suspend fun trimHistory()
+
+    @androidx.room.Transaction
+    suspend fun insertHistory(history: HistoryEntity) {
+        insertHistoryRaw(history)
+        trimHistory()
+    }
 
     @Query("DELETE FROM history")
     suspend fun clearHistory()
