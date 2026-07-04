@@ -63,9 +63,9 @@ A: 否。HTTP 服务仅在本地运行，无云端上传
 
 ## 推荐的本地 TTS 引擎（精简）
 
-- CloneTTS — 离线原生 TTS，支持1–3秒音色克隆、注册为系统引擎并提供本地 HTTP API。适合完全离线或注重隐私的设备端合成。
+- [CloneTTS](https://github.com/sipeter/CloneTTS) — 离线原生 TTS，支持 1–3 秒音色克隆、注册为系统引擎并提供本地 HTTP API。适合完全离线或注重隐私的设备端合成。
 
-- TalkifyTTS — 多云引擎连接器，支持微软/腾讯/阿里等云端服务，提供流式合成与系统集成，适合需要高音质或频繁切换云厂商的场景。
+- [TalkifyTTS](https://github.com/LonePheasantWarrior/TalkifyTTS) — 多云引擎连接器，支持微软/腾讯/阿里等云端服务，提供流式合成与系统集成，适合需要高音质或频繁切换云厂商的场景。
 
 ### 简要集成建议
 1. 统一实现 TTS Provider 接口（文本→音频），便于切换引擎。  
