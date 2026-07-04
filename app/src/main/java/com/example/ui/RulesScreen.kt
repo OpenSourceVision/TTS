@@ -172,6 +172,7 @@ fun RulesScreen(
     var exportJsonText by remember { mutableStateOf("") }
     
     var showMenu by remember { mutableStateOf(false) }
+    var showClearAllConfirmDialog by remember { mutableStateOf(false) }
     
     // File Import launcher
     val fileImportLauncher = rememberLauncherForActivityResult(
@@ -366,6 +367,13 @@ fun RulesScreen(
                                     exportJsonText = viewModel.exportRulesToJsonString()
                                     showExportDialog = true
                                 }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("一键清空", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                showMenu = false
+                                showClearAllConfirmDialog = true
                             }
                         )
                     }
@@ -1196,6 +1204,31 @@ fun RulesScreen(
                     onClick = { showExportDialog = false }
                 ) {
                     Text("关闭")
+                }
+            }
+        )
+    }
+
+    // 5. Clear All Confirmation Dialog
+    if (showClearAllConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirmDialog = false },
+            title = { Text("警告：清空全部规则") },
+            text = { Text("此操作将永久清空您配置的所有发音分组以及匹配替换规则，且不可撤销！确定要全部清空吗？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearAllConfirmDialog = false
+                        viewModel.clearAllRules()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("确定清空")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllConfirmDialog = false }) {
+                    Text("取消")
                 }
             }
         )

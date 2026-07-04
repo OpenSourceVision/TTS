@@ -532,6 +532,15 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
         }
     }
 
+    fun clearAllRules() {
+        viewModelScope.launch {
+            appDao.clearAllRuleGroups()
+            appDao.clearAllRules()
+            RuleCache.clear()
+            _toastEvent.emit("所有发音与替换规则已清空")
+        }
+    }
+
     fun toggleRuleEnabled(rule: RuleEntity) {
         viewModelScope.launch {
             appDao.insertRule(rule.copy(isEnabled = !rule.isEnabled))
