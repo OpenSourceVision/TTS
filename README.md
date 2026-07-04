@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎧 Android TTS 转发服务器
+#  Android TTS 转发服务器
 
 将 Android 手机本地的语音引擎转换为标准的 **HTTP 音频流接口**，供第三方应用进行流式语音合成。
 
