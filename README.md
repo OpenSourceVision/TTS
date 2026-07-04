@@ -2,7 +2,7 @@
 
 # 🎧 Android TTS 转发服务器
 
-将 Android 手机本地的 TTS (Text-to-Speech) 语音引擎转换为标准的 **HTTP 音频流接口**，供第三方应用进行流式语音合成。
+将 Android 手机本地的语音引擎转换为标准的 **HTTP 音频流接口**，供第三方应用进行流式语音合成。
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-100%25-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Android](https://img.shields.io/badge/Android-7.4%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
