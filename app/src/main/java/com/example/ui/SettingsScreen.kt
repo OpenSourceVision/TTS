@@ -55,6 +55,8 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
@@ -63,6 +65,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.SettingsEntity
 import com.example.viewmodel.TtsViewModel
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 
 data class LanguageOption(val label: String, val language: String, val country: String)
 
@@ -79,6 +86,21 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+
+    var webdavUrl by remember { mutableStateOf(settings.webdavUrl) }
+    var webdavUsername by remember { mutableStateOf(settings.webdavUsername) }
+    var webdavPassword by remember { mutableStateOf(settings.webdavPassword) }
+    var webdavPath by remember { mutableStateOf(settings.webdavPath) }
+    var webdavDir by remember { mutableStateOf(settings.webdavDir) }
+    var showWebdavConfigDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(settings) {
+        webdavUrl = settings.webdavUrl
+        webdavUsername = settings.webdavUsername
+        webdavPassword = settings.webdavPassword
+        webdavPath = settings.webdavPath
+        webdavDir = settings.webdavDir
+    }
 
     Column(
         modifier = modifier
@@ -368,7 +390,311 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 4. Cache Clearing Card
+        // 4. Backup & Restore Card
+        Text(
+            text = "备份恢复",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        val coroutineScope = rememberCoroutineScope()
+
+        val fileExportLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.CreateDocument("application/json")
+        ) { uri ->
+            if (uri != null) {
+                coroutineScope.launch {
+                    try {
+                        val jsonContent = viewModel.backupToLocalString()
+                        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                            outputStream.write(jsonContent.toByteArray(Charsets.UTF_8))
+                        }
+                        Toast.makeText(context, "本地备份导出成功", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "导出本地备份失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
+        val fileImportLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent()
+        ) { uri ->
+            if (uri != null) {
+                coroutineScope.launch {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                            val reader = java.io.BufferedReader(java.io.InputStreamReader(inputStream))
+                            val stringBuilder = StringBuilder()
+                            var line: String?
+                            while (reader.readLine().also { line = it } != null) {
+                                stringBuilder.append(line)
+                            }
+                            viewModel.restoreFromLocalString(stringBuilder.toString()) { result ->
+                                if (result.isSuccess) {
+                                    Toast.makeText(context, "本地备份恢复成功", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "本地恢复失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "读取备份文件失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Local Backup Row
+                Text(
+                    text = "本地备份",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val formattedDate = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
+                            fileExportLauncher.launch("TTS_Forwarder_Backup_$formattedDate.json")
+                        },
+                        modifier = Modifier.weight(1f).testTag("local_backup_button")
+                    ) {
+                        Text("导出本地备份", style = MaterialTheme.typography.bodySmall)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            fileImportLauncher.launch("application/json")
+                        },
+                        modifier = Modifier.weight(1f).testTag("local_restore_button")
+                    ) {
+                        Text("导入本地备份", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // WebDav Backup Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "WebDav 云同步",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    TextButton(
+                        onClick = { showWebdavConfigDialog = true },
+                        modifier = Modifier.testTag("webdav_config_trigger")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "WebDAV 配置",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("WebDAV 配置", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    var syncingBackup by remember { mutableStateOf(false) }
+                    var syncingRestore by remember { mutableStateOf(false) }
+
+                    Button(
+                        onClick = {
+                            if (settings.webdavUrl.isBlank()) {
+                                Toast.makeText(context, "请先配置 WebDav 服务器", Toast.LENGTH_SHORT).show()
+                                showWebdavConfigDialog = true
+                                return@Button
+                            }
+                            syncingBackup = true
+                            viewModel.backupToWebDav { result ->
+                                syncingBackup = false
+                                if (result.isSuccess) {
+                                    Toast.makeText(context, "立即备份云端成功", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "备份失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        enabled = !syncingBackup,
+                        modifier = Modifier.weight(1f).testTag("webdav_backup_now_button")
+                    ) {
+                        Text(if (syncingBackup) "备份中..." else "立即备份到云端", style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (settings.webdavUrl.isBlank()) {
+                                Toast.makeText(context, "请先配置 WebDav 服务器", Toast.LENGTH_SHORT).show()
+                                showWebdavConfigDialog = true
+                                return@OutlinedButton
+                            }
+                            syncingRestore = true
+                            viewModel.restoreFromWebDav { result ->
+                                syncingRestore = false
+                                if (result.isSuccess) {
+                                    Toast.makeText(context, "云端恢复恢复成功", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "恢复失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        enabled = !syncingRestore,
+                        modifier = Modifier.weight(1f).testTag("webdav_restore_now_button")
+                    ) {
+                        Text(if (syncingRestore) "同步中..." else "从云端同步恢复", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+
+        if (showWebdavConfigDialog) {
+            AlertDialog(
+                onDismissRequest = { showWebdavConfigDialog = false },
+                title = {
+                    Text(
+                        text = "配置 WebDAV 云同步",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = webdavUrl,
+                            onValueChange = { webdavUrl = it.trim() },
+                            label = { Text("WebDav 服务器地址") },
+                            placeholder = { Text("如: https://dav.jianguoyun.com/dav/") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("webdav_url_input")
+                        )
+
+                        OutlinedTextField(
+                            value = webdavUsername,
+                            onValueChange = { webdavUsername = it.trim() },
+                            label = { Text("用户名/邮箱") },
+                            placeholder = { Text("WebDav 账号") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("webdav_username_input")
+                        )
+
+                        OutlinedTextField(
+                            value = webdavPassword,
+                            onValueChange = { webdavPassword = it.trim() },
+                            label = { Text("密码/应用授权密码") },
+                            placeholder = { Text("WebDav 密码") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth().testTag("webdav_password_input")
+                        )
+
+                        OutlinedTextField(
+                            value = webdavDir,
+                            onValueChange = { webdavDir = it.trim() },
+                            label = { Text("云端备份目录") },
+                            placeholder = { Text("TTS") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("webdav_dir_input")
+                        )
+
+                        OutlinedTextField(
+                            value = webdavPath,
+                            onValueChange = { webdavPath = it.trim() },
+                            label = { Text("云端备份文件名") },
+                            placeholder = { Text("tts_rules_backup.json") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("webdav_path_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        var testingConnection by remember { mutableStateOf(false) }
+
+                        OutlinedButton(
+                            onClick = {
+                                if (webdavUrl.isBlank()) {
+                                    Toast.makeText(context, "请先输入服务器地址", Toast.LENGTH_SHORT).show()
+                                    return@OutlinedButton
+                                }
+                                testingConnection = true
+                                viewModel.testWebDavConnection(webdavUrl, webdavUsername, webdavPassword, webdavDir) { result ->
+                                    testingConnection = false
+                                    if (result.isSuccess) {
+                                        Toast.makeText(context, "连接测试成功！配置正确", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "连接测试失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            enabled = !testingConnection,
+                            modifier = Modifier.fillMaxWidth().testTag("webdav_test_button")
+                        ) {
+                            Text(if (testingConnection) "连接测试中..." else "测试连接")
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.updateSettings(
+                                settings.copy(
+                                    webdavUrl = webdavUrl,
+                                    webdavUsername = webdavUsername,
+                                    webdavPassword = webdavPassword,
+                                    webdavPath = webdavPath,
+                                    webdavDir = webdavDir
+                                )
+                            )
+                            Toast.makeText(context, "同步配置已保存", Toast.LENGTH_SHORT).show()
+                            showWebdavConfigDialog = false
+                        },
+                        modifier = Modifier.testTag("webdav_save_button")
+                    ) {
+                        Text("保存")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showWebdavConfigDialog = false },
+                        modifier = Modifier.testTag("webdav_config_cancel")
+                    ) {
+                        Text("取消")
+                    }
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 5. Cache Clearing Card
         Text(
             text = "缓存清理",
             style = MaterialTheme.typography.titleMedium,
@@ -397,7 +723,7 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "TTS 语音音频缓存",
+                            text = "TTS音频缓存",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
                         )
@@ -430,7 +756,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 5. Version Info Card
+        // 6. Version Info Card
         Text(
             text = "版本信息",
             style = MaterialTheme.typography.titleMedium,

@@ -20,6 +20,10 @@ import com.example.data.RuleGroupEntity
 import com.example.data.RuleEntity
 import com.example.data.RuleCache
 import com.example.data.TextRuleProcessor
+import com.example.data.WebDavHelper
+import com.example.data.BackupPackage
+import com.example.data.toJsonString
+import com.example.data.parseSettingsFromJson
 import com.example.service.TtsServerService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -642,6 +646,176 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
                     onComplete(false)
                 }
                 _toastEvent.emit("导入规则失败: 格式错误")
+            }
+        }
+    }
+
+    fun testWebDavConnection(url: String, username: String, password: String, dirName: String = "", onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = WebDavHelper.testConnection(url, username, password, dirName)
+            onResult(result)
+        }
+    }
+
+    fun backupToWebDav(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val settings = appDao.getSettings() ?: SettingsEntity()
+                if (settings.webdavUrl.isBlank()) {
+                    onResult(Result.failure(Exception("请先配置 WebDav 服务器地址")))
+                    return@launch
+                }
+                val rulesStr = exportRulesToJsonString()
+                val settingsStr = settings.toJsonString()
+                val pkg = BackupPackage(version = 1, rulesJson = rulesStr, settingsJson = settingsStr)
+                val jsonContent = pkg.toJsonString()
+
+                val result = WebDavHelper.uploadFile(
+                    url = settings.webdavUrl,
+                    username = settings.webdavUsername,
+                    password = settings.webdavPassword,
+                    dirName = settings.webdavDir,
+                    fileName = settings.webdavPath,
+                    content = jsonContent
+                )
+                if (result.isSuccess) {
+                    _toastEvent.emit("云端备份成功")
+                }
+                onResult(result)
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun restoreFromWebDav(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val settings = appDao.getSettings() ?: SettingsEntity()
+                if (settings.webdavUrl.isBlank()) {
+                    onResult(Result.failure(Exception("请先配置 WebDav 服务器地址")))
+                    return@launch
+                }
+
+                val downloadResult = WebDavHelper.downloadFile(
+                    url = settings.webdavUrl,
+                    username = settings.webdavUsername,
+                    password = settings.webdavPassword,
+                    dirName = settings.webdavDir,
+                    fileName = settings.webdavPath
+                )
+
+                if (downloadResult.isSuccess) {
+                    val content = downloadResult.getOrThrow()
+                    val pkg = BackupPackage.fromJsonString(content)
+                    if (pkg == null) {
+                        onResult(Result.failure(Exception("备份文件格式解析错误")))
+                        return@launch
+                    }
+
+                    val success = importBackupPackage(pkg)
+                    if (success) {
+                        _toastEvent.emit("云端恢复成功")
+                        onResult(Result.success(Unit))
+                    } else {
+                        onResult(Result.failure(Exception("导入备份数据失败")))
+                    }
+                } else {
+                    onResult(Result.failure(downloadResult.exceptionOrNull() ?: Exception("下载备份失败")))
+                }
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    suspend fun backupToLocalString(): String {
+        return withContext(Dispatchers.IO) {
+            try {
+                val settings = appDao.getSettings() ?: SettingsEntity()
+                val rulesStr = exportRulesToJsonString()
+                val settingsStr = settings.toJsonString()
+                val pkg = BackupPackage(version = 1, rulesJson = rulesStr, settingsJson = settingsStr)
+                pkg.toJsonString()
+            } catch (e: Exception) {
+                ""
+            }
+        }
+    }
+
+    fun restoreFromLocalString(jsonStr: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val pkg = BackupPackage.fromJsonString(jsonStr)
+                if (pkg == null) {
+                    onResult(Result.failure(Exception("备份文件格式解析错误")))
+                    return@launch
+                }
+                val success = importBackupPackage(pkg)
+                if (success) {
+                    _toastEvent.emit("本地恢复成功")
+                    onResult(Result.success(Unit))
+                } else {
+                    onResult(Result.failure(Exception("导入备份数据失败")))
+                }
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    private suspend fun importBackupPackage(backup: BackupPackage): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                // 1. Restore settings if available
+                backup.settingsJson?.let { sJson ->
+                    val newSettings = com.example.data.parseSettingsFromJson(sJson)
+                    if (newSettings != null) {
+                        appDao.saveSettings(newSettings.copy(id = 1))
+                    }
+                }
+
+                // 2. Clear and restore rules
+                val rulesStr = backup.rulesJson
+                if (rulesStr.isNotBlank()) {
+                    val jsonArray = org.json.JSONArray(rulesStr)
+                    appDao.clearAllRules()
+                    appDao.clearAllRuleGroups()
+
+                    for (i in (jsonArray.length() - 1) downTo 0) {
+                        val groupObj = jsonArray.getJSONObject(i)
+                        val groupName = groupObj.getString("groupName")
+                        val groupReplacement = groupObj.optString("groupReplacement", "")
+
+                        val groupId = appDao.insertRuleGroup(RuleGroupEntity(name = groupName, replacement = groupReplacement))
+
+                        val rulesArray = groupObj.optJSONArray("rules") ?: org.json.JSONArray()
+                        for (j in (rulesArray.length() - 1) downTo 0) {
+                            val ruleObj = rulesArray.getJSONObject(j)
+                            val target = ruleObj.getString("target")
+                            val replacement = ruleObj.getString("replacement")
+                            val matchWord = ruleObj.optString("matchWord", "")
+                            val isForwardMatch = ruleObj.optBoolean("isForwardMatch", true)
+                            val isEnabled = ruleObj.optBoolean("isEnabled", true)
+
+                            appDao.insertRule(
+                                RuleEntity(
+                                    groupId = groupId,
+                                    target = target,
+                                    replacement = replacement,
+                                    matchWord = matchWord,
+                                    isForwardMatch = isForwardMatch,
+                                    isEnabled = isEnabled
+                                )
+                            )
+                        }
+                    }
+                }
+                RuleCache.clear()
+                true
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
             }
         }
     }

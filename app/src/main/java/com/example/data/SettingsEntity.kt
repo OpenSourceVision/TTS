@@ -14,5 +14,10 @@ data class SettingsEntity(
     val country: String = "CN",
     val autoStartServer: Boolean = true,
     val themeMode: Int = 0, // 0 = Auto (System), 1 = Light, 2 = Dark
-    val useDynamicColor: Boolean = true
+    val useDynamicColor: Boolean = true,
+    val webdavUrl: String = "",
+    val webdavUsername: String = "",
+    val webdavPassword: String = "",
+    val webdavPath: String = "tts_rules_backup.json",
+    val webdavDir: String = "TTS"
 )

@@ -429,7 +429,7 @@ fun RulesScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(sortedRuleGroups, key = { it.id }) { group ->
                     val groupRules = rules.filter { it.groupId == group.id }
@@ -449,12 +449,12 @@ fun RulesScreen(
                     
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                         )
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                             // Group Header (Clickable area to fold/unfold)
                             Row(
                                 modifier = Modifier
@@ -478,24 +478,25 @@ fun RulesScreen(
                                         text = if (isExpanded) "▼" else "▶",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(end = 8.dp)
+                                        modifier = Modifier.padding(end = 6.dp)
                                     )
-
+  
                                     Text(
                                         text = if (group.replacement.isNotEmpty()) "${group.name} ➔ ${group.replacement}" else group.name,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp,
-                                        modifier = Modifier.padding(vertical = 4.dp)
+                                        fontSize = 15.sp,
+                                        modifier = Modifier.padding(vertical = 2.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = "(${groupRules.size} 条)",
                                         style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                     )
                                 }
-
+  
                                 Row {
                                     IconButton(
                                         onClick = {
@@ -504,12 +505,14 @@ fun RulesScreen(
                                             ruleMatchInput = ""
                                             ruleIsForwardMatch = true
                                             showAddRuleDialogForGroup = group
-                                        }
+                                        },
+                                        modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
                                             Icons.Default.Add,
                                             contentDescription = "在组中新增规则",
-                                            tint = MaterialTheme.colorScheme.primary
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
                                     IconButton(
@@ -517,37 +520,41 @@ fun RulesScreen(
                                             groupNameInput = group.name
                                             groupReplacementInput = group.replacement
                                             showEditGroupDialogForGroup = group
-                                        }
+                                        },
+                                        modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
                                             Icons.Default.Edit,
                                             contentDescription = "修改分组",
-                                            tint = MaterialTheme.colorScheme.primary
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
                                     IconButton(
                                         onClick = {
                                             viewModel.deleteRuleGroup(group.id)
-                                        }
+                                        },
+                                        modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
                                             Icons.Default.Delete,
                                             contentDescription = "删除分组",
-                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
                                 }
                             }
-
+  
                             // Only show body if group is expanded
                             if (isExpanded) {
                                 if (displayRules.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                                    Spacer(modifier = Modifier.height(8.dp))
-
+                                    Spacer(modifier = Modifier.height(6.dp))
+  
                                     Column(
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         displayRules.forEach { rule ->
                                             Row(
@@ -555,9 +562,9 @@ fun RulesScreen(
                                                     .fillMaxWidth()
                                                     .background(
                                                         MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                                                        RoundedCornerShape(8.dp)
+                                                        RoundedCornerShape(6.dp)
                                                     )
-                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    .padding(horizontal = 10.dp, vertical = 4.dp),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
@@ -579,9 +586,9 @@ fun RulesScreen(
                                                     color = directionColor,
                                                     modifier = Modifier
                                                         .background(directionBg, RoundedCornerShape(4.dp))
-                                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                        .padding(horizontal = 6.dp, vertical = 3.dp)
                                                 )
-
+  
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -597,24 +604,24 @@ fun RulesScreen(
                                                             ruleIsForwardMatch = rule.isForwardMatch
                                                             showEditRuleDialogForRule = rule
                                                         },
-                                                        modifier = Modifier.size(36.dp)
+                                                        modifier = Modifier.size(32.dp)
                                                     ) {
                                                         Icon(
                                                             Icons.Default.Edit,
                                                             contentDescription = "修改规则",
                                                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                                                            modifier = Modifier.size(20.dp)
+                                                            modifier = Modifier.size(18.dp)
                                                         )
                                                     }
                                                     IconButton(
                                                         onClick = { viewModel.deleteRule(rule.id) },
-                                                        modifier = Modifier.size(36.dp)
+                                                        modifier = Modifier.size(32.dp)
                                                     ) {
                                                         Icon(
                                                             Icons.Default.Delete,
                                                             contentDescription = "删除规则",
                                                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                                            modifier = Modifier.size(20.dp)
+                                                            modifier = Modifier.size(18.dp)
                                                         )
                                                     }
                                                 }
@@ -622,7 +629,7 @@ fun RulesScreen(
                                         }
                                     }
                                 } else {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     Text(
                                         text = if (searchQuery.isNotEmpty()) "未找到匹配的规则" else "字组内暂无匹配规则，点击右上角加号新增规则",
                                         fontSize = 11.sp,

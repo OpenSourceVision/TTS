@@ -92,6 +92,7 @@ fun DashboardScreen(
     var testText by remember { mutableStateOf("天真烂漫的微风吹拂着山谷，少年抬起头看向远方的地平线，心中充满了无限的希望与勇气。") }
     val isTesting by viewModel.isTesting.collectAsState()
     var showPortDialog by remember { mutableStateOf(false) }
+    var showSpeechRateDialog by remember { mutableStateOf(false) }
 
     // Load engines initially
     LaunchedEffect(Unit) {
@@ -133,7 +134,7 @@ fun DashboardScreen(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -158,7 +159,7 @@ fun DashboardScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // Engine Dropdown Selector
                 var expanded by remember { mutableStateOf(false) }
@@ -218,13 +219,17 @@ fun DashboardScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Speech Rate Row
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showSpeechRateDialog = true }
+                        .padding(vertical = 4.dp, horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -241,60 +246,30 @@ fun DashboardScreen(
                         )
                     }
 
-                    var rateInputInternal by remember { mutableStateOf(String.format(java.util.Locale.US, "%.1f", settings.speechRate)) }
-                    var isEditingRate by remember { mutableStateOf(false) }
-
-                    if (isEditingRate) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = rateInputInternal,
-                                onValueChange = { input ->
-                                    rateInputInternal = input.filter { char -> char.isDigit() || char == '.' }
-                                },
-                                modifier = Modifier
-                                    .width(90.dp)
-                                    .testTag("rate_input"),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            IconButton(
-                                onClick = {
-                                    val newRate = rateInputInternal.toFloatOrNull() ?: 1.0f
-                                    val roundedRate = Math.round(newRate * 10f) / 10f
-                                    viewModel.updateSettings(settings.copy(speechRate = roundedRate.coerceIn(0.1f, 4.0f)))
-                                    isEditingRate = false
-                                },
-                                modifier = Modifier.testTag("save_rate_button")
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = "保存", tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    } else {
-                        IconButton(
-                            onClick = {
-                                rateInputInternal = String.format(java.util.Locale.US, "%.1f", settings.speechRate)
-                                isEditingRate = true
-                            },
-                            modifier = Modifier.testTag("edit_rate_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "修改语速",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
+                    IconButton(
+                        onClick = { showSpeechRateDialog = true },
+                        modifier = Modifier.testTag("edit_rate_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "修改语速",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Port Selection / Setting
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showPortDialog = true }
+                        .padding(vertical = 4.dp, horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -311,47 +286,16 @@ fun DashboardScreen(
                         )
                     }
 
-                    var portInputInternal by remember { mutableStateOf(settings.port.toString()) }
-                    var isEditingPort by remember { mutableStateOf(false) }
-
-                    if (isEditingPort) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = portInputInternal,
-                                onValueChange = { portInputInternal = it.filter { char -> char.isDigit() } },
-                                modifier = Modifier
-                                    .width(90.dp)
-                                    .testTag("port_input"),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            IconButton(
-                                onClick = {
-                                    val newPort = portInputInternal.toIntOrNull() ?: 8080
-                                    viewModel.updateSettings(settings.copy(port = newPort))
-                                    isEditingPort = false
-                                },
-                                modifier = Modifier.testTag("save_port_button")
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = "保存", tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    } else {
-                        IconButton(
-                            onClick = {
-                                portInputInternal = settings.port.toString()
-                                isEditingPort = true
-                            },
-                            modifier = Modifier.testTag("edit_port_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "修改端口",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
+                    IconButton(
+                        onClick = { showPortDialog = true },
+                        modifier = Modifier.testTag("edit_port_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "修改端口",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             }
@@ -467,6 +411,150 @@ fun DashboardScreen(
                     }
                 }
             }
+        }
+
+        // Speech Rate Setting Dialog
+        if (showSpeechRateDialog) {
+            var rateInputInternal by remember { mutableStateOf(String.format(java.util.Locale.US, "%.1f", settings.speechRate)) }
+            var sliderValue by remember { mutableStateOf(settings.speechRate.coerceIn(0.1f, 4.0f)) }
+
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showSpeechRateDialog = false },
+                title = {
+                    Text(
+                        text = "设置语速",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "调整语音合成的播放速度 (当前: ${String.format("%.1f", sliderValue)}x)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Slider(
+                            value = sliderValue,
+                            onValueChange = { newValue ->
+                                sliderValue = Math.round(newValue * 10f) / 10f
+                                rateInputInternal = String.format(java.util.Locale.US, "%.1f", sliderValue)
+                            },
+                            valueRange = 0.1f..4.0f,
+                            steps = 38, // 0.1 to 4.0 with steps of 0.1 is 38 intermediate steps
+                            modifier = Modifier.testTag("rate_dialog_slider")
+                        )
+
+                        OutlinedTextField(
+                            value = rateInputInternal,
+                            onValueChange = { input ->
+                                val filtered = input.filter { char -> char.isDigit() || char == '.' }
+                                rateInputInternal = filtered
+                                filtered.toFloatOrNull()?.let {
+                                    if (it in 0.1f..4.0f) {
+                                        sliderValue = it
+                                    }
+                                }
+                            },
+                            label = { Text("语速数值") },
+                            placeholder = { Text("1.0") },
+                            supportingText = { Text("有效范围: 0.1 - 4.0") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("rate_dialog_input")
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val finalRate = rateInputInternal.toFloatOrNull() ?: sliderValue
+                            val roundedRate = (Math.round(finalRate * 10f) / 10f).coerceIn(0.1f, 4.0f)
+                            viewModel.updateSettings(settings.copy(speechRate = roundedRate))
+                            showSpeechRateDialog = false
+                        },
+                        modifier = Modifier.testTag("rate_dialog_confirm")
+                    ) {
+                        Text("确定")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = { showSpeechRateDialog = false },
+                        modifier = Modifier.testTag("rate_dialog_cancel")
+                    ) {
+                        Text("取消")
+                    }
+                }
+            )
+        }
+
+        // Port Setting Dialog
+        if (showPortDialog) {
+            var portInputInternal by remember { mutableStateOf(settings.port.toString()) }
+
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showPortDialog = false },
+                title = {
+                    Text(
+                        text = "设置监听端口",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "设置本地HTTP服务的端口号。修改端口后，请重启服务生效。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = portInputInternal,
+                            onValueChange = { portInputInternal = it.filter { char -> char.isDigit() } },
+                            label = { Text("端口号") },
+                            placeholder = { Text("8080") },
+                            supportingText = { Text("有效范围: 1024 - 65535") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("port_dialog_input")
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val newPort = portInputInternal.toIntOrNull() ?: 8080
+                            val validatedPort = newPort.coerceIn(1024, 65535)
+                            viewModel.updateSettings(settings.copy(port = validatedPort))
+                            showPortDialog = false
+                        },
+                        modifier = Modifier.testTag("port_dialog_confirm")
+                    ) {
+                        Text("确定")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = { showPortDialog = false },
+                        modifier = Modifier.testTag("port_dialog_cancel")
+                    ) {
+                        Text("取消")
+                    }
+                }
+            )
         }
     }
 }

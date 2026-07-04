@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [SettingsEntity::class, HistoryEntity::class, RuleGroupEntity::class, RuleEntity::class], version = 6, exportSchema = false)
+@Database(entities = [SettingsEntity::class, HistoryEntity::class, RuleGroupEntity::class, RuleEntity::class], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun appDao(): AppDao
 
@@ -54,6 +54,24 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                ensureRuleGroupsTable(db)
+                ensureRulesTable(db)
+                ensureSettingsFields(db)
+                ensureWebdavFields(db)
+            }
+        }
+
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                ensureRuleGroupsTable(db)
+                ensureRulesTable(db)
+                ensureSettingsFields(db)
+                ensureWebdavFields(db)
+            }
+        }
+
         private fun ensureRuleGroupsTable(db: SupportSQLiteDatabase) {
             if (!hasTable(db, "rule_groups")) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `rule_groups` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `replacement` TEXT NOT NULL DEFAULT '')")
@@ -87,6 +105,26 @@ abstract class AppDatabase : RoomDatabase() {
                 }
                 if (!hasColumn(db, "settings", "useDynamicColor")) {
                     db.execSQL("ALTER TABLE `settings` ADD COLUMN `useDynamicColor` INTEGER NOT NULL DEFAULT 1")
+                }
+            }
+        }
+
+        private fun ensureWebdavFields(db: SupportSQLiteDatabase) {
+            if (hasTable(db, "settings")) {
+                if (!hasColumn(db, "settings", "webdavUrl")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `webdavUrl` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!hasColumn(db, "settings", "webdavUsername")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `webdavUsername` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!hasColumn(db, "settings", "webdavPassword")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `webdavPassword` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!hasColumn(db, "settings", "webdavPath")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `webdavPath` TEXT NOT NULL DEFAULT 'tts_rules_backup.json'")
+                }
+                if (!hasColumn(db, "settings", "webdavDir")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `webdavDir` TEXT NOT NULL DEFAULT 'TTS'")
                 }
             }
         }
@@ -133,7 +171,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tts_forwarder_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
