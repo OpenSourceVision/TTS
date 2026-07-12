@@ -7,6 +7,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -134,7 +135,7 @@ fun DashboardScreen(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
         ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -159,39 +160,36 @@ fun DashboardScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 // Engine Dropdown Selector
                 var expanded by remember { mutableStateOf(false) }
                 val selectedEngineLabel = engines.firstOrNull { it.packageName == settings.targetEnginePackage }?.label ?: settings.targetEnginePackage
 
                 Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = selectedEngineLabel,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("目标TTS合成引擎") },
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(42.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                             .clickable { expanded = true }
+                            .padding(horizontal = 12.dp)
                             .testTag("engine_dropdown_trigger"),
-                        enabled = false, // Disable typing, tap is handled by parent Box clickable
-                        trailingIcon = {
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "展开选择")
-                        },
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            disabledBorderColor = MaterialTheme.colorScheme.outline,
-                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = selectedEngineLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                    )
-                    // Transparent overlay to detect clicks
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { expanded = true }
-                    )
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = "展开选择",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
 
                     DropdownMenu(
                         expanded = expanded,

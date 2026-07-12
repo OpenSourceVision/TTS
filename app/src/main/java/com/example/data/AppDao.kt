@@ -73,4 +73,49 @@ interface AppDao {
 
     @Query("DELETE FROM rules")
     suspend fun clearAllRules()
+
+    @Query("SELECT * FROM polyphone_cache WHERE windowText = :window AND targetIndex = :idx")
+    suspend fun findPolyphoneCache(window: String, idx: Int): PolyphoneCacheRow?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPolyphoneCache(row: PolyphoneCacheRow)
+
+    @Query("SELECT * FROM polyphone_cache")
+    suspend fun getAllPolyphoneCache(): List<PolyphoneCacheRow>
+
+    @Query("SELECT * FROM polyphone_cache WHERE windowText LIKE '%' || :char || '%'")
+    suspend fun getPolyphoneCandidates(char: String): List<PolyphoneCacheRow>
+
+    @Query("DELETE FROM polyphone_cache")
+    suspend fun clearAllPolyphoneCache()
+
+    @Query("DELETE FROM polyphone_cache WHERE windowText = :windowText AND targetIndex = :targetIndex")
+    suspend fun deletePolyphoneCacheEntry(windowText: String, targetIndex: Int)
+
+    @Query("SELECT COUNT(*) FROM polyphone_cache")
+    suspend fun getPolyphoneCacheCount(): Int
+
+    @Query("DELETE FROM polyphone_cache WHERE (windowText || '_' || targetIndex) IN (SELECT (windowText || '_' || targetIndex) FROM polyphone_cache ORDER BY hitCount ASC, updatedAt ASC LIMIT :limit)")
+    suspend fun prunePolyphoneCache(limit: Int)
+
+    @Query("SELECT * FROM preset_polyphones")
+    suspend fun getAllPresetPolyphones(): List<PresetPolyphoneEntity>
+
+    @Query("SELECT * FROM preset_polyphones")
+    fun getAllPresetPolyphonesFlow(): Flow<List<PresetPolyphoneEntity>>
+
+    @Query("SELECT * FROM preset_polyphones WHERE char = :ch")
+    suspend fun getPresetPolyphone(ch: String): PresetPolyphoneEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPresetPolyphones(list: List<PresetPolyphoneEntity>)
+
+    @Query("DELETE FROM preset_polyphones WHERE char = :ch")
+    suspend fun deletePresetPolyphone(ch: String)
+
+    @Query("DELETE FROM preset_polyphones")
+    suspend fun clearAllPresetPolyphones()
+
+    @Query("SELECT COUNT(*) FROM preset_polyphones")
+    suspend fun getPresetPolyphonesCount(): Int
 }

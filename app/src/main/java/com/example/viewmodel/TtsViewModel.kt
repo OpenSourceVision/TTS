@@ -46,7 +46,7 @@ data class TtsEngineInfo(
 
 class TtsViewModel(private val database: AppDatabase) : ViewModel() {
 
-    private val appDao = database.appDao()
+    val appDao = database.appDao()
 
     val settingsState: StateFlow<SettingsEntity> = appDao.getSettingsFlow()
         .map { it ?: SettingsEntity() }
@@ -91,39 +91,54 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
     init {
         // Initialize default settings if not exists
         viewModelScope.launch {
+            refreshPolyphoneCacheCount()
             val existing = appDao.getSettings()
             if (existing == null) {
                 appDao.saveSettings(SettingsEntity())
             }
             
-            // Populate default rules if there are no rule groups
+            // Populate default rules if there are no rule groups or if database has old literals
             val existingGroups = appDao.getAllRuleGroups()
-            if (existingGroups.isEmpty()) {
-                val group1Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "虫"))
-                appDao.insertRule(
-                    RuleEntity(
-                        groupId = group1Id,
-                        target = "重",
-                        replacement = "虫",
-                        matchWord = "一|二|三|四|五|六|七|八|九|十",
-                        isForwardMatch = true,
-                        isEnabled = true
-                    )
-                )
-                
-                val group2Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "众"))
-                appDao.insertRule(
-                    RuleEntity(
-                        groupId = group2Id,
-                        target = "重",
-                        replacement = "众",
-                        matchWord = "量|要",
-                        isForwardMatch = false,
-                        isEnabled = true
-                    )
-                )
-                RuleCache.clear()
+            val allRules = appDao.getAllRules()
+            val hasOldRules = allRules.any { it.target in listOf("重要", "重心", "一重", "二重", "三重") }
+            if (existingGroups.isEmpty() || hasOldRules) {
+                setupDefaultReferenceRules()
             }
+        }
+    }
+
+    private fun setupDefaultReferenceRules() {
+        viewModelScope.launch {
+            appDao.clearAllRuleGroups()
+            appDao.clearAllRules()
+            
+            // 1. Group: "重" -> "众"
+            val group1Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "众"))
+            appDao.insertRule(
+                RuleEntity(
+                    groupId = group1Id,
+                    target = "重(?=要|心)",
+                    replacement = "众",
+                    matchWord = "",
+                    isForwardMatch = true,
+                    isEnabled = true
+                )
+            )
+
+            // 2. Group: "重" -> "虫"
+            val group2Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "虫"))
+            appDao.insertRule(
+                RuleEntity(
+                    groupId = group2Id,
+                    target = "(?<=[一二三四五六七八九十])重",
+                    replacement = "虫",
+                    matchWord = "",
+                    isForwardMatch = true,
+                    isEnabled = true
+                )
+            )
+
+            RuleCache.clear()
         }
     }
 
@@ -161,7 +176,7 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             }
             
             // Apply polyphone rules on the test text with cache!
-            val processedText = TextRuleProcessor.process(text, appDao)
+            val processedText = TextRuleProcessor.process(text, appDao, context)
 
             testTts = TextToSpeech(context, { status ->
                 if (status == TextToSpeech.SUCCESS) {
@@ -506,10 +521,10 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
         }
     }
 
-    fun updateRule(ruleId: Long, replacement: String, matchWord: String, isForwardMatch: Boolean) {
+    fun updateRule(ruleId: Long, target: String, replacement: String) {
         viewModelScope.launch {
-            if (replacement.isBlank()) {
-                _toastEvent.emit("替换字不能为空")
+            if (target.isBlank() || replacement.isBlank()) {
+                _toastEvent.emit("目标正则与替换字不能为空")
                 return@launch
             }
             val allRules = appDao.getAllRules()
@@ -517,9 +532,8 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             if (existing != null) {
                 appDao.insertRule(
                     existing.copy(
-                        replacement = replacement,
-                        matchWord = matchWord,
-                        isForwardMatch = isForwardMatch
+                        target = target,
+                        replacement = replacement
                     )
                 )
                 RuleCache.clear()
@@ -550,6 +564,176 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
             appDao.insertRule(rule.copy(isEnabled = !rule.isEnabled))
             RuleCache.clear()
             _toastEvent.emit("规则状态已更新")
+        }
+    }
+
+    private val _polyphoneCacheCount = MutableStateFlow(0)
+    val polyphoneCacheCount: StateFlow<Int> = _polyphoneCacheCount.asStateFlow()
+
+    private val _polyphoneCacheList = MutableStateFlow<List<com.example.data.PolyphoneCacheRow>>(emptyList())
+    val polyphoneCacheList: StateFlow<List<com.example.data.PolyphoneCacheRow>> = _polyphoneCacheList.asStateFlow()
+
+    fun loadPolyphoneCacheList() {
+        viewModelScope.launch {
+            _polyphoneCacheList.value = appDao.getAllPolyphoneCache()
+        }
+    }
+
+    fun refreshPolyphoneCacheCount() {
+        viewModelScope.launch {
+            _polyphoneCacheCount.value = appDao.getPolyphoneCacheCount()
+        }
+    }
+
+    fun clearPolyphoneCache() {
+        viewModelScope.launch {
+            appDao.clearAllPolyphoneCache()
+            _polyphoneCacheCount.value = 0
+            _polyphoneCacheList.value = emptyList()
+            _toastEvent.emit("自学习缓存已清空")
+        }
+    }
+
+    fun deletePolyphoneCacheEntry(row: com.example.data.PolyphoneCacheRow) {
+        viewModelScope.launch {
+            appDao.deletePolyphoneCacheEntry(row.windowText, row.targetIndex)
+            loadPolyphoneCacheList()
+            refreshPolyphoneCacheCount()
+            _toastEvent.emit("已删除该多音字缓存")
+        }
+    }
+
+    fun refinePolyphoneCacheEntry(
+        oldRow: com.example.data.PolyphoneCacheRow,
+        newWindowText: String,
+        newTargetIndex: Int
+    ) {
+        viewModelScope.launch {
+            // Delete the old row first
+            appDao.deletePolyphoneCacheEntry(oldRow.windowText, oldRow.targetIndex)
+            
+            // Insert the new row
+            val newRow = com.example.data.PolyphoneCacheRow(
+                windowText = newWindowText,
+                targetIndex = newTargetIndex,
+                pinyin = oldRow.pinyin,
+                hitCount = oldRow.hitCount,
+                updatedAt = System.currentTimeMillis()
+            )
+            appDao.upsertPolyphoneCache(newRow)
+            
+            loadPolyphoneCacheList()
+            refreshPolyphoneCacheCount()
+            _toastEvent.emit("多音字上下文已提炼成功")
+        }
+    }
+
+    private val _presetPolyphoneList = MutableStateFlow<List<com.example.data.PresetPolyphoneEntity>>(emptyList())
+    val presetPolyphoneList: StateFlow<List<com.example.data.PresetPolyphoneEntity>> = _presetPolyphoneList.asStateFlow()
+
+    fun loadPresetPolyphoneList() {
+        viewModelScope.launch {
+            _presetPolyphoneList.value = appDao.getAllPresetPolyphones()
+        }
+    }
+
+    fun upsertPresetPolyphone(char: String, readings: String, context: Context) {
+        viewModelScope.launch {
+            if (char.trim().length != 1) {
+                _toastEvent.emit("多音字必须是单个字符")
+                return@launch
+            }
+            if (readings.trim().isEmpty()) {
+                _toastEvent.emit("候选拼音不能为空")
+                return@launch
+            }
+            val entity = com.example.data.PresetPolyphoneEntity(char.trim(), readings.trim())
+            appDao.insertPresetPolyphones(listOf(entity))
+            com.example.data.PolyphonicTable.reload(context)
+            loadPresetPolyphoneList()
+            _toastEvent.emit("已保存预置多音字: $char")
+        }
+    }
+
+    fun deletePresetPolyphone(char: String, context: Context) {
+        viewModelScope.launch {
+            appDao.deletePresetPolyphone(char)
+            com.example.data.PolyphonicTable.reload(context)
+            loadPresetPolyphoneList()
+            _toastEvent.emit("已删除预置多音字: $char")
+        }
+    }
+
+    fun resetPresetPolyphonesToDefault(context: Context) {
+        viewModelScope.launch {
+            appDao.clearAllPresetPolyphones()
+            com.example.data.PolyphonicTable.reload(context)
+            loadPresetPolyphoneList()
+            _toastEvent.emit("多音字表已重置为系统默认")
+        }
+    }
+
+    fun exportPolyphoneCache(context: Context, uri: android.net.Uri, onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val rows = appDao.getAllPolyphoneCache()
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
+                    rows.forEach { row ->
+                        writer.write(row.toJsonString())
+                        writer.newLine()
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    onComplete(true, "导出成功，共 ${rows.size} 条数据")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onComplete(false, "导出失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun importPolyphoneCache(context: Context, uri: android.net.Uri, onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                var added = 0
+                var merged = 0
+                context.contentResolver.openInputStream(uri)?.bufferedReader()?.useLines { lines ->
+                    lines.forEach { line ->
+                        if (line.isNotBlank()) {
+                            val row = com.example.data.PolyphoneCacheRow.fromJsonString(line)
+                            if (row != null) {
+                                val existing = appDao.findPolyphoneCache(row.windowText, row.targetIndex)
+                                if (existing == null) {
+                                    appDao.upsertPolyphoneCache(row)
+                                    added++
+                                } else if (row.hitCount > existing.hitCount) {
+                                    appDao.upsertPolyphoneCache(row)
+                                    merged++
+                                }
+                            }
+                        }
+                    }
+                }
+                refreshPolyphoneCacheCount()
+                withContext(Dispatchers.Main) {
+                    onComplete(true, "导入完成: 新增 $added 条，合并 $merged 条")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onComplete(false, "导入失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun testPolyphoneDisambiguation(context: Context, text: String, onResult: (List<com.example.data.DisambiguationCharResult>) -> Unit) {
+        viewModelScope.launch {
+            val resolver = com.example.data.PolyphoneResolver(appDao, context)
+            val results = resolver.resolveWithDetails(text)
+            refreshPolyphoneCacheCount()
+            onResult(results)
         }
     }
 

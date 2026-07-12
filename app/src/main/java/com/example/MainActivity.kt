@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -90,7 +91,21 @@ class MainActivity : ComponentActivity() {
                 darkTheme = darkTheme,
                 dynamicColor = settings.useDynamicColor
             ) {
-                var selectedTab by remember { mutableStateOf(0) }
+                // Keep track of navigation history as a back-stack list of tab indices.
+                var navigationStack by remember { mutableStateOf(listOf(0)) }
+                val selectedTab = navigationStack.last()
+
+                // Intercept back gesture (swipe-back) if we are not on the first screen.
+                BackHandler(enabled = navigationStack.size > 1) {
+                    navigationStack = navigationStack.dropLast(1)
+                }
+
+                fun navigateToTab(tab: Int) {
+                    if (selectedTab != tab) {
+                        // Remove previous occurrence if any, and append the new tab to the top of backstack
+                        navigationStack = navigationStack.filter { it != tab } + tab
+                    }
+                }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -98,25 +113,25 @@ class MainActivity : ComponentActivity() {
                         NavigationBar {
                             NavigationBarItem(
                                 selected = selectedTab == 0,
-                                onClick = { selectedTab = 0 },
+                                onClick = { navigateToTab(0) },
                                 icon = { Icon(Icons.Default.Home, contentDescription = "主页") },
                                 label = { Text("主页") }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 1,
-                                onClick = { selectedTab = 1 },
+                                onClick = { navigateToTab(1) },
                                 icon = { Icon(Icons.Default.List, contentDescription = "日志") },
                                 label = { Text("日志") }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 2,
-                                onClick = { selectedTab = 2 },
+                                onClick = { navigateToTab(2) },
                                 icon = { Icon(Icons.Default.Edit, contentDescription = "规则") },
                                 label = { Text("规则") }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 3,
-                                onClick = { selectedTab = 3 },
+                                onClick = { navigateToTab(3) },
                                 icon = { Icon(Icons.Default.Settings, contentDescription = "设置") },
                                 label = { Text("设置") }
                             )

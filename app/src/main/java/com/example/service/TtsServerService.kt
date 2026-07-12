@@ -640,6 +640,6 @@ class TtsServerService : Service() {
     }
 
     private suspend fun processTextRules(originalText: String, db: AppDatabase): String {
-        return TextRuleProcessor.process(originalText, db.appDao())
+        return TextRuleProcessor.process(originalText, db.appDao(), applicationContext)
     }
 }

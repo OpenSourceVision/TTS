@@ -37,24 +37,37 @@ object WebDavHelper {
             if (dirName.isBlank()) {
                 return@withContext Result.success(Unit)
             }
-            val folderUrl = getFolderUrl(url, dirName)
+            
+            val cleanDirName = dirName.trim().removePrefix("/").removeSuffix("/")
+            if (cleanDirName.isEmpty()) {
+                return@withContext Result.success(Unit)
+            }
+
+            val parts = cleanDirName.split("/")
+            var currentPath = ""
             val credential = Credentials.basic(username, password)
 
-            val request = Request.Builder()
-                .url(folderUrl)
-                .method("MKCOL", null)
-                .header("Authorization", credential)
-                .build()
+            for (part in parts) {
+                if (part.isBlank()) continue
+                currentPath = if (currentPath.isEmpty()) part else "$currentPath/$part"
+                
+                val baseUrl = if (url.endsWith("/")) url else "$url/"
+                val folderUrl = "$baseUrl$currentPath"
+                
+                val request = Request.Builder()
+                    .url(folderUrl)
+                    .method("MKCOL", null)
+                    .header("Authorization", credential)
+                    .build()
 
-            client.newCall(request).execute().use { response ->
-                // 201 Created: folder was created
-                // 405 Method Not Allowed: folder already exists
-                if (response.isSuccessful || response.code == 201 || response.code == 405) {
-                    Result.success(Unit)
-                } else {
-                    Result.failure(Exception("创建同步目录失败，服务器返回状态码: ${response.code}"))
+                client.newCall(request).execute().use { response ->
+                    // 201: Created, 405: Already exists, 409: Conflict (already exists on some servers), 200/204: Success
+                    if (response.isSuccessful || response.code == 201 || response.code == 405 || response.code == 409 || response.code == 200) {
+                        // Success for this level
+                    }
                 }
             }
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(Exception("创建同步目录异常: ${e.localizedMessage ?: e.javaClass.simpleName}"))
         }

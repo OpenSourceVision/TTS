@@ -1,0 +1,11 @@
+重,null,量->zhòng
+重,一,null->chóng
+得,觉,null->de
+得,null,了->děi
+行,null,人->xíng
+行,银,null->háng
+会,开,null->huì
+地,默,null->de
+地,土,null->dì
+和,温,null->hé
+和,null,牌->he

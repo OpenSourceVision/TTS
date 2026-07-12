@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [SettingsEntity::class, HistoryEntity::class, RuleGroupEntity::class, RuleEntity::class], version = 8, exportSchema = false)
+@Database(entities = [SettingsEntity::class, HistoryEntity::class, RuleGroupEntity::class, RuleEntity::class, PolyphoneCacheRow::class, PresetPolyphoneEntity::class], version = 11, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun appDao(): AppDao
 
@@ -72,6 +72,24 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `polyphone_cache` (`windowText` TEXT NOT NULL, `targetIndex` INTEGER NOT NULL, `pinyin` TEXT NOT NULL, `hitCount` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`windowText`, `targetIndex`))")
+            }
+        }
+
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `preset_polyphones` (`char` TEXT NOT NULL, `readings` TEXT NOT NULL, PRIMARY KEY(`char`))")
+            }
+        }
+
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                ensureModelManagementFields(db)
+            }
+        }
+
         private fun ensureRuleGroupsTable(db: SupportSQLiteDatabase) {
             if (!hasTable(db, "rule_groups")) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `rule_groups` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `replacement` TEXT NOT NULL DEFAULT '')")
@@ -129,6 +147,32 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private fun ensureModelManagementFields(db: SupportSQLiteDatabase) {
+            if (hasTable(db, "settings")) {
+                if (!hasColumn(db, "settings", "customGeminiApiKey")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `customGeminiApiKey` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!hasColumn(db, "settings", "customGeminiEndpoint")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `customGeminiEndpoint` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!hasColumn(db, "settings", "customGeminiModel")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `customGeminiModel` TEXT NOT NULL DEFAULT 'gemini-1.5-flash'")
+                }
+                if (!hasColumn(db, "settings", "useLocalModel")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `useLocalModel` INTEGER NOT NULL DEFAULT 0")
+                }
+                if (!hasColumn(db, "settings", "localModelEndpoint")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `localModelEndpoint` TEXT NOT NULL DEFAULT 'http://127.0.0.1:11434/v1/chat/completions'")
+                }
+                if (!hasColumn(db, "settings", "localModelApiKey")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `localModelApiKey` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!hasColumn(db, "settings", "localModelName")) {
+                    db.execSQL("ALTER TABLE `settings` ADD COLUMN `localModelName` TEXT NOT NULL DEFAULT 'llama3'")
+                }
+            }
+        }
+
         private fun hasTable(db: SupportSQLiteDatabase, tableName: String): Boolean {
             var cursor: android.database.Cursor? = null
             try {
@@ -171,7 +215,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tts_forwarder_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance

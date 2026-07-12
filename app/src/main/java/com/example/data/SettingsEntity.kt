@@ -19,5 +19,14 @@ data class SettingsEntity(
     val webdavUsername: String = "",
     val webdavPassword: String = "",
     val webdavPath: String = "tts_rules_backup.json",
-    val webdavDir: String = "TTS"
+    val webdavDir: String = "TTS",
+    // Cloud model custom configurations
+    val customGeminiApiKey: String = "",
+    val customGeminiEndpoint: String = "",
+    val customGeminiModel: String = "gemini-1.5-flash",
+    // Local model configurations
+    val useLocalModel: Boolean = false,
+    val localModelEndpoint: String = "http://127.0.0.1:11434/v1/chat/completions",
+    val localModelApiKey: String = "",
+    val localModelName: String = "llama3"
 )

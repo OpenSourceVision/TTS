@@ -411,9 +411,9 @@ fun SettingsScreen(
                         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                             outputStream.write(jsonContent.toByteArray(Charsets.UTF_8))
                         }
-                        Toast.makeText(context, "本地备份导出成功", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "备份成功", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
-                        Toast.makeText(context, "导出本地备份失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "备份失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -434,9 +434,9 @@ fun SettingsScreen(
                             }
                             viewModel.restoreFromLocalString(stringBuilder.toString()) { result ->
                                 if (result.isSuccess) {
-                                    Toast.makeText(context, "本地备份恢复成功", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "恢复成功", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "本地恢复失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "恢复失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
@@ -474,7 +474,7 @@ fun SettingsScreen(
                         },
                         modifier = Modifier.weight(1f).testTag("local_backup_button")
                     ) {
-                        Text("导出本地备份", style = MaterialTheme.typography.bodySmall)
+                        Text("备份", style = MaterialTheme.typography.bodySmall)
                     }
                     OutlinedButton(
                         onClick = {
@@ -482,7 +482,7 @@ fun SettingsScreen(
                         },
                         modifier = Modifier.weight(1f).testTag("local_restore_button")
                     ) {
-                        Text("导入本地备份", style = MaterialTheme.typography.bodySmall)
+                        Text("恢复", style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
@@ -497,7 +497,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "WebDav 云同步",
+                        text = "WebDAV",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.secondary
@@ -527,7 +527,7 @@ fun SettingsScreen(
                     Button(
                         onClick = {
                             if (settings.webdavUrl.isBlank()) {
-                                Toast.makeText(context, "请先配置 WebDav 服务器", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "请先配置 WebDAV 服务器", Toast.LENGTH_SHORT).show()
                                 showWebdavConfigDialog = true
                                 return@Button
                             }
@@ -535,7 +535,7 @@ fun SettingsScreen(
                             viewModel.backupToWebDav { result ->
                                 syncingBackup = false
                                 if (result.isSuccess) {
-                                    Toast.makeText(context, "立即备份云端成功", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "备份成功", Toast.LENGTH_SHORT).show()
                                 } else {
                                     Toast.makeText(context, "备份失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
                                 }
@@ -544,13 +544,13 @@ fun SettingsScreen(
                         enabled = !syncingBackup,
                         modifier = Modifier.weight(1f).testTag("webdav_backup_now_button")
                     ) {
-                        Text(if (syncingBackup) "备份中..." else "立即备份到云端", style = MaterialTheme.typography.bodySmall)
+                        Text(if (syncingBackup) "备份中..." else "备份", style = MaterialTheme.typography.bodySmall)
                     }
 
                     OutlinedButton(
                         onClick = {
                             if (settings.webdavUrl.isBlank()) {
-                                Toast.makeText(context, "请先配置 WebDav 服务器", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "请先配置 WebDAV 服务器", Toast.LENGTH_SHORT).show()
                                 showWebdavConfigDialog = true
                                 return@OutlinedButton
                             }
@@ -558,7 +558,7 @@ fun SettingsScreen(
                             viewModel.restoreFromWebDav { result ->
                                 syncingRestore = false
                                 if (result.isSuccess) {
-                                    Toast.makeText(context, "云端恢复恢复成功", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "恢复成功", Toast.LENGTH_SHORT).show()
                                 } else {
                                     Toast.makeText(context, "恢复失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
                                 }
@@ -567,7 +567,7 @@ fun SettingsScreen(
                         enabled = !syncingRestore,
                         modifier = Modifier.weight(1f).testTag("webdav_restore_now_button")
                     ) {
-                        Text(if (syncingRestore) "同步中..." else "从云端同步恢复", style = MaterialTheme.typography.bodySmall)
+                        Text(if (syncingRestore) "恢复中..." else "恢复", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -578,7 +578,7 @@ fun SettingsScreen(
                 onDismissRequest = { showWebdavConfigDialog = false },
                 title = {
                     Text(
-                        text = "配置 WebDAV 云同步",
+                        text = "配置 WebDAV",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -591,7 +591,7 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = webdavUrl,
                             onValueChange = { webdavUrl = it.trim() },
-                            label = { Text("WebDav 服务器地址") },
+                            label = { Text("WebDAV 服务器地址") },
                             placeholder = { Text("如: https://dav.jianguoyun.com/dav/") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().testTag("webdav_url_input")
@@ -601,7 +601,7 @@ fun SettingsScreen(
                             value = webdavUsername,
                             onValueChange = { webdavUsername = it.trim() },
                             label = { Text("用户名/邮箱") },
-                            placeholder = { Text("WebDav 账号") },
+                            placeholder = { Text("WebDAV 账号") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().testTag("webdav_username_input")
                         )
@@ -610,7 +610,7 @@ fun SettingsScreen(
                             value = webdavPassword,
                             onValueChange = { webdavPassword = it.trim() },
                             label = { Text("密码/应用授权密码") },
-                            placeholder = { Text("WebDav 密码") },
+                            placeholder = { Text("WebDAV 密码") },
                             singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
                             modifier = Modifier.fillMaxWidth().testTag("webdav_password_input")
