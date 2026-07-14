@@ -101,7 +101,7 @@ fun LogsScreen(
                     .fillMaxWidth()
                     .weight(1f)
                     .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                         RoundedCornerShape(16.dp)
                     ),
                 contentAlignment = Alignment.Center
@@ -145,7 +145,7 @@ fun LogsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                         )
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {

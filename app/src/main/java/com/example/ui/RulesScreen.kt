@@ -27,15 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.example.data.RuleEntity
 import com.example.data.RuleGroupEntity
 import com.example.viewmodel.TtsViewModel
-
-private enum class GroupSortOrder(val label: String) {
-    TIME_ASC("创建时间正序"),
-    TIME_DESC("创建时间倒序"),
-    NAME_ASC("名称字母正序"),
-    NAME_DESC("名称字母倒序"),
-    COUNT_DESC("规则数量降序"),
-    COUNT_ASC("规则数量升序")
-}
+import com.example.viewmodel.GroupSortOrder
 
 @Composable
 fun RulesScreen(
@@ -47,9 +39,10 @@ fun RulesScreen(
     val ruleGroupsList by viewModel.ruleGroupsState.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
-    var sortOrder by remember { mutableStateOf(GroupSortOrder.TIME_ASC) }
+    val sortOrder by viewModel.ruleSortOrder.collectAsState()
     var showSortMenu by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var showClearAllConfirmDialog by remember { mutableStateOf(false) }
 
     // Dialog state for Groups
     var showGroupDialog by remember { mutableStateOf(false) }
@@ -89,8 +82,8 @@ fun RulesScreen(
     // Sort filtered groups
     val sortedGroups = remember(filteredGroups, rulesList, sortOrder) {
         when (sortOrder) {
-            GroupSortOrder.TIME_ASC -> filteredGroups.sortedBy { it.id }
-            GroupSortOrder.TIME_DESC -> filteredGroups.sortedByDescending { it.id }
+            GroupSortOrder.TIME_ASC -> filteredGroups.sortedByDescending { it.id }
+            GroupSortOrder.TIME_DESC -> filteredGroups.sortedBy { it.id }
             GroupSortOrder.NAME_ASC -> filteredGroups.sortedBy { it.name }
             GroupSortOrder.NAME_DESC -> filteredGroups.sortedByDescending { it.name }
             GroupSortOrder.COUNT_DESC -> filteredGroups.sortedByDescending { g ->
@@ -128,7 +121,7 @@ fun RulesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Header Section: Title, Sort Dropdown & Compact Add Group Button
             item {
@@ -170,7 +163,7 @@ fun RulesScreen(
                                     DropdownMenuItem(
                                         text = { Text(order.label, style = MaterialTheme.typography.bodyMedium) },
                                         onClick = {
-                                            sortOrder = order
+                                            viewModel.updateRuleSortOrder(order)
                                             showSortMenu = false
                                         },
                                         leadingIcon = {
@@ -222,13 +215,18 @@ fun RulesScreen(
                                 onDismissRequest = { showMoreMenu = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("清空所有规则", style = MaterialTheme.typography.bodyMedium) },
+                                    text = { Text("清空所有规则", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) },
                                     onClick = {
                                         showMoreMenu = false
-                                        viewModel.clearAllRules()
+                                        showClearAllConfirmDialog = true
                                     },
                                     leadingIcon = {
-                                        Icon(Icons.Default.Delete, contentDescription = "清空", modifier = Modifier.size(16.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "清空",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
                                     }
                                 )
                             }
@@ -302,7 +300,7 @@ fun RulesScreen(
                             .testTag("group_card_${group.id}"),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                         ),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f))
                     ) {
@@ -353,7 +351,7 @@ fun RulesScreen(
                                             targetGroupIdForRule = group.id
                                             editingRule = null
                                             ruleTargetInput = ""
-                                            ruleReplacementInput = ""
+                                            ruleReplacementInput = group.replacement
                                             showRuleDialog = true
                                         },
                                         modifier = Modifier
@@ -709,6 +707,60 @@ fun RulesScreen(
             dismissButton = {
                 TextButton(onClick = { showRuleDialog = false }) {
                     Text("取消")
+                }
+            }
+        )
+    }
+
+    // Dialog: Confirm Clear All Rules
+    if (showClearAllConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirmDialog = false },
+            title = {
+                Text(
+                    text = "确认清空",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "确定要清空所有发音规则和分组吗？此操作无法撤销。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 左侧：确认按钮（警示色，改名为确认，移到左边防止误触）
+                    Button(
+                        onClick = {
+                            viewModel.clearAllRules()
+                            showClearAllConfirmDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("确认")
+                    }
+
+                    // 右侧：取消按钮（安全选项，移到右边）
+                    Button(
+                        onClick = { showClearAllConfirmDialog = false },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("取消")
+                    }
                 }
             }
         )

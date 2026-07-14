@@ -44,9 +44,25 @@ data class TtsEngineInfo(
     val label: String
 )
 
+enum class GroupSortOrder(val label: String) {
+    TIME_ASC("创建时间正序"),
+    TIME_DESC("创建时间倒序"),
+    NAME_ASC("名称字母正序"),
+    NAME_DESC("名称字母倒序"),
+    COUNT_DESC("规则数量降序"),
+    COUNT_ASC("规则数量升序")
+}
+
 class TtsViewModel(private val database: AppDatabase) : ViewModel() {
 
     val appDao = database.appDao()
+
+    private val _ruleSortOrder = MutableStateFlow(GroupSortOrder.TIME_ASC)
+    val ruleSortOrder: StateFlow<GroupSortOrder> = _ruleSortOrder.asStateFlow()
+
+    fun updateRuleSortOrder(order: GroupSortOrder) {
+        _ruleSortOrder.value = order
+    }
 
     val settingsState: StateFlow<SettingsEntity> = appDao.getSettingsFlow()
         .map { it ?: SettingsEntity() }

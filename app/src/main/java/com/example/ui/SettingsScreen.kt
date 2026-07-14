@@ -130,13 +130,13 @@ fun SettingsScreen(
                         Toast.makeText(context, "无法打开网页: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                     }
                 },
-                modifier = Modifier.testTag("github_logo_button")
+                modifier = Modifier.size(48.dp).testTag("github_logo_button")
             ) {
                 Icon(
                     painter = painterResource(id = com.example.R.drawable.ic_github),
                     contentDescription = "GitHub 项目地址",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(30.dp)
                 )
             }
         }
@@ -156,7 +156,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
         ) {
             Column {
@@ -332,7 +332,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -433,9 +433,7 @@ fun SettingsScreen(
                                 stringBuilder.append(line)
                             }
                             viewModel.restoreFromLocalString(stringBuilder.toString()) { result ->
-                                if (result.isSuccess) {
-                                    Toast.makeText(context, "恢复成功", Toast.LENGTH_SHORT).show()
-                                } else {
+                                if (!result.isSuccess) {
                                     Toast.makeText(context, "恢复失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
                                 }
                             }
@@ -451,17 +449,22 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 // Local Backup Row
-                Text(
-                    text = "本地备份",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(32.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "本地备份",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -504,7 +507,8 @@ fun SettingsScreen(
                     )
                     TextButton(
                         onClick = { showWebdavConfigDialog = true },
-                        modifier = Modifier.testTag("webdav_config_trigger")
+                        modifier = Modifier.height(32.dp).testTag("webdav_config_trigger"),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
@@ -515,7 +519,7 @@ fun SettingsScreen(
                         Text("WebDAV 配置", style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -534,9 +538,7 @@ fun SettingsScreen(
                             syncingBackup = true
                             viewModel.backupToWebDav { result ->
                                 syncingBackup = false
-                                if (result.isSuccess) {
-                                    Toast.makeText(context, "备份成功", Toast.LENGTH_SHORT).show()
-                                } else {
+                                if (!result.isSuccess) {
                                     Toast.makeText(context, "备份失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
                                 }
                             }
@@ -557,9 +559,7 @@ fun SettingsScreen(
                             syncingRestore = true
                             viewModel.restoreFromWebDav { result ->
                                 syncingRestore = false
-                                if (result.isSuccess) {
-                                    Toast.makeText(context, "恢复成功", Toast.LENGTH_SHORT).show()
-                                } else {
+                                if (!result.isSuccess) {
                                     Toast.makeText(context, "恢复失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
                                 }
                             }
@@ -712,7 +712,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -746,7 +746,7 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "清理",
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -778,7 +778,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             )
         ) {
             Row(
