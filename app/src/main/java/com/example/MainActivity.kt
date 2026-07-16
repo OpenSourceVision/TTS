@@ -17,6 +17,10 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.List
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -40,12 +44,14 @@ import com.example.viewmodel.TtsViewModel
 import com.example.viewmodel.TtsViewModelFactory
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
     private val database by lazy { AppDatabase.getDatabase(this) }
     private val viewModel: TtsViewModel by viewModels {
-        TtsViewModelFactory(database)
+        TtsViewModelFactory(this, database)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,7 +72,7 @@ class MainActivity : ComponentActivity() {
 
         // Auto start TTS Server if configured
         lifecycleScope.launch {
-            val settings = database.appDao().getSettings()
+            val settings = withContext(Dispatchers.IO) { database.appDao().getSettings() }
             if (settings != null && settings.autoStartServer && !TtsServerService.isServerRunning.value) {
                 val intent = Intent(this@MainActivity, TtsServerService::class.java).apply {
                     action = TtsServerService.ACTION_START_SERVER
@@ -114,25 +120,45 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(
                                 selected = selectedTab == 0,
                                 onClick = { navigateToTab(0) },
-                                icon = { Icon(Icons.Default.Home, contentDescription = "主页") },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (selectedTab == 0) Icons.Filled.Home else Icons.Outlined.Home,
+                                        contentDescription = "主页"
+                                    )
+                                },
                                 label = { Text("主页") }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 1,
                                 onClick = { navigateToTab(1) },
-                                icon = { Icon(Icons.Default.List, contentDescription = "日志") },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (selectedTab == 1) Icons.Filled.List else Icons.Outlined.List,
+                                        contentDescription = "日志"
+                                    )
+                                },
                                 label = { Text("日志") }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 2,
                                 onClick = { navigateToTab(2) },
-                                icon = { Icon(Icons.Default.Edit, contentDescription = "规则") },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (selectedTab == 2) Icons.Filled.Edit else Icons.Outlined.Edit,
+                                        contentDescription = "规则"
+                                    )
+                                },
                                 label = { Text("规则") }
                             )
                             NavigationBarItem(
                                 selected = selectedTab == 3,
                                 onClick = { navigateToTab(3) },
-                                icon = { Icon(Icons.Default.Settings, contentDescription = "设置") },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (selectedTab == 3) Icons.Filled.Settings else Icons.Outlined.Settings,
+                                        contentDescription = "设置"
+                                    )
+                                },
                                 label = { Text("设置") }
                             )
                         }

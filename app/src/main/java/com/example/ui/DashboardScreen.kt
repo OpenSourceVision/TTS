@@ -37,6 +37,13 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -95,9 +102,11 @@ fun DashboardScreen(
     var showPortDialog by remember { mutableStateOf(false) }
     var showSpeechRateDialog by remember { mutableStateOf(false) }
 
-    // Load engines initially
+    // Load engines initially if not already loaded
     LaunchedEffect(Unit) {
-        viewModel.loadEngines(context)
+        if (viewModel.engines.value.isEmpty()) {
+            viewModel.loadEngines(context)
+        }
     }
 
     Column(
@@ -132,7 +141,7 @@ fun DashboardScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -153,9 +162,9 @@ fun DashboardScreen(
                         modifier = Modifier.testTag("refresh_engines_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
+                            imageVector = Icons.Outlined.Refresh,
                             contentDescription = "刷新系统TTS引擎",
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -171,7 +180,7 @@ fun DashboardScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(42.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(8.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                             .clickable { expanded = true }
                             .padding(horizontal = 12.dp)
@@ -187,7 +196,7 @@ fun DashboardScreen(
                         Icon(
                             Icons.Default.ArrowDropDown,
                             contentDescription = "展开选择",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -249,9 +258,9 @@ fun DashboardScreen(
                         modifier = Modifier.testTag("edit_rate_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Settings,
+                            imageVector = Icons.Outlined.Edit,
                             contentDescription = "修改语速",
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -289,9 +298,9 @@ fun DashboardScreen(
                         modifier = Modifier.testTag("edit_port_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Settings,
+                            imageVector = Icons.Outlined.Edit,
                             contentDescription = "修改端口",
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -304,7 +313,7 @@ fun DashboardScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -328,9 +337,9 @@ fun DashboardScreen(
                             modifier = Modifier.testTag("stop_test_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Close,
+                                imageVector = Icons.Outlined.Close,
                                 contentDescription = "停止",
-                                tint = MaterialTheme.colorScheme.error,
+                                tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(28.dp)
                             )
                         }
@@ -342,9 +351,9 @@ fun DashboardScreen(
                             modifier = Modifier.testTag("start_test_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.PlayArrow,
+                                imageVector = Icons.Outlined.PlayArrow,
                                 contentDescription = "播放",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(28.dp)
                             )
                         }
@@ -370,7 +379,7 @@ fun DashboardScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -392,8 +401,12 @@ fun DashboardScreen(
                             .weight(1f)
                             .testTag("copy_config_button")
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = "复制")
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.Share,
+                            contentDescription = "复制",
+                            modifier = Modifier.size(ButtonDefaults.IconSize)
+                        )
+                        Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
                         Text("复制配置")
                     }
 
@@ -403,8 +416,12 @@ fun DashboardScreen(
                             .weight(1f)
                             .testTag("import_config_button")
                     ) {
-                        Icon(Icons.Default.Send, contentDescription = "导入")
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.Send,
+                            contentDescription = "导入",
+                            modifier = Modifier.size(ButtonDefaults.IconSize)
+                        )
+                        Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
                         Text("导入阅读")
                     }
                 }
@@ -569,7 +586,7 @@ fun AppHeader() {
                 text = "主页",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }

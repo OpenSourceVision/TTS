@@ -18,38 +18,44 @@ import androidx.core.view.WindowCompat
 
 private val DarkColorScheme =
   darkColorScheme(
-    primary = PrimaryDark,
-    secondary = SecondaryDark,
-    tertiary = TertiaryDark,
+    primary = AccentDark,
+    secondary = AccentDark,
+    tertiary = SuccessColor,
     background = BackgroundDark,
-    surface = SurfaceDark,
-    surfaceVariant = SurfaceVariantDark,
-    onPrimary = Color(0xFF15161E),
-    onSecondary = Color(0xFF15161E),
-    onTertiary = Color(0xFF15161E),
-    onBackground = Color(0xFFC0CAF5),
-    onSurface = Color(0xFFC0CAF5),
-    onSurfaceVariant = OnSurfaceVariantDark,
-    outline = OutlineDark,
-    outlineVariant = OutlineDark.copy(alpha = 0.5f)
+    surface = CardDark,
+    surfaceVariant = CardDark,
+    surfaceContainer = CardDark,
+    surfaceContainerLow = CardDark,
+    surfaceContainerHigh = CardDark,
+    onPrimary = Color.Black,
+    onSecondary = Color.Black,
+    onTertiary = Color.White,
+    onBackground = PrimaryTextDark,
+    onSurface = PrimaryTextDark,
+    onSurfaceVariant = SecondaryTextDark,
+    outline = DividerDark,
+    outlineVariant = DividerDark
   )
 
 private val LightColorScheme =
   lightColorScheme(
-    primary = PrimaryLight,
-    secondary = SecondaryLight,
-    tertiary = TertiaryLight,
+    primary = AccentLight,
+    secondary = AccentLight,
+    tertiary = SuccessColor,
     background = BackgroundLight,
-    surface = SurfaceLight,
-    surfaceVariant = SurfaceVariantLight,
+    surface = CardLight,
+    surfaceVariant = CardLight,
+    surfaceContainer = CardLight,
+    surfaceContainerLow = CardLight,
+    surfaceContainerHigh = CardLight,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
-    onBackground = Color(0xFF2C2E3E),
-    onSurface = Color(0xFF2C2E3E),
-    onSurfaceVariant = OnSurfaceVariantLight,
-    outline = OutlineLight,
-    outlineVariant = OutlineLight.copy(alpha = 0.5f)
+    onBackground = PrimaryTextLight,
+    onSurface = PrimaryTextLight,
+    onSurfaceVariant = SecondaryTextLight,
+    outline = DividerLight,
+    outlineVariant = DividerLight
   )
 
 @Composable

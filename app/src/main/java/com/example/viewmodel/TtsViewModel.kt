@@ -53,7 +53,7 @@ enum class GroupSortOrder(val label: String) {
     COUNT_ASC("规则数量升序")
 }
 
-class TtsViewModel(private val database: AppDatabase) : ViewModel() {
+class TtsViewModel(private val context: Context, private val database: AppDatabase) : ViewModel() {
 
     val appDao = database.appDao()
 
@@ -105,9 +105,15 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
     private var testTts: TextToSpeech? = null
 
     init {
-        // Initialize default settings if not exists
-        viewModelScope.launch {
-            refreshPolyphoneCacheCount()
+        // Initialize default settings and preload polyphonic & default reading tables off the main thread
+        viewModelScope.launch(Dispatchers.IO) {
+            // Pre-warm tables in background to avoid future lookup lag
+            com.example.data.PolyphonicTable.init(context)
+            com.example.data.DefaultReadingTable.init(context)
+
+            val cacheCount = appDao.getPolyphoneCacheCount()
+            _polyphoneCacheCount.value = cacheCount
+
             val existing = appDao.getSettings()
             if (existing == null) {
                 appDao.saveSettings(SettingsEntity())
@@ -123,39 +129,37 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
         }
     }
 
-    private fun setupDefaultReferenceRules() {
-        viewModelScope.launch {
-            appDao.clearAllRuleGroups()
-            appDao.clearAllRules()
-            
-            // 1. Group: "重" -> "众"
-            val group1Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "众"))
-            appDao.insertRule(
-                RuleEntity(
-                    groupId = group1Id,
-                    target = "重(?=要|心)",
-                    replacement = "众",
-                    matchWord = "",
-                    isForwardMatch = true,
-                    isEnabled = true
-                )
+    private suspend fun setupDefaultReferenceRules() {
+        appDao.clearAllRuleGroups()
+        appDao.clearAllRules()
+        
+        // 1. Group: "重" -> "众"
+        val group1Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "众"))
+        appDao.insertRule(
+            RuleEntity(
+                groupId = group1Id,
+                target = "重(?=要|心)",
+                replacement = "众",
+                matchWord = "",
+                isForwardMatch = true,
+                isEnabled = true
             )
+        )
 
-            // 2. Group: "重" -> "虫"
-            val group2Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "虫"))
-            appDao.insertRule(
-                RuleEntity(
-                    groupId = group2Id,
-                    target = "(?<=[一二三四五六七八九十])重",
-                    replacement = "虫",
-                    matchWord = "",
-                    isForwardMatch = true,
-                    isEnabled = true
-                )
+        // 2. Group: "重" -> "虫"
+        val group2Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "虫"))
+        appDao.insertRule(
+            RuleEntity(
+                groupId = group2Id,
+                target = "(?<=[一二三四五六七八九十])重",
+                replacement = "虫",
+                matchWord = "",
+                isForwardMatch = true,
+                isEnabled = true
             )
+        )
 
-            RuleCache.clear()
-        }
+        RuleCache.clear()
     }
 
     fun loadEngines(context: Context) {
@@ -654,7 +658,7 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
     }
 
     fun upsertPresetPolyphone(char: String, readings: String, context: Context) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             if (char.trim().length != 1) {
                 _toastEvent.emit("多音字必须是单个字符")
                 return@launch
@@ -672,7 +676,7 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
     }
 
     fun deletePresetPolyphone(char: String, context: Context) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             appDao.deletePresetPolyphone(char)
             com.example.data.PolyphonicTable.reload(context)
             loadPresetPolyphoneList()
@@ -681,7 +685,7 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
     }
 
     fun resetPresetPolyphonesToDefault(context: Context) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             appDao.clearAllPresetPolyphones()
             com.example.data.PolyphonicTable.reload(context)
             loadPresetPolyphoneList()
@@ -1026,11 +1030,11 @@ class TtsViewModel(private val database: AppDatabase) : ViewModel() {
     }
 }
 
-class TtsViewModelFactory(private val database: AppDatabase) : ViewModelProvider.Factory {
+class TtsViewModelFactory(private val context: Context, private val database: AppDatabase) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(TtsViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return TtsViewModel(database) as T
+            return TtsViewModel(context.applicationContext, database) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

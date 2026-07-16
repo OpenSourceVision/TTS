@@ -328,33 +328,107 @@ class TtsServerService : Service() {
             val pitch = normalizePitch(rawPitch)
             enginePackage = params["engine"] ?: params["e"] ?: settings.targetEnginePackage
 
-            val audioFile = synthesisMutex.withLock {
-                synthesizeText(text, rate, pitch, enginePackage)
+            val sentences = splitTextIntoSentences(text)
+            if (sentences.isEmpty()) {
+                sendErrorResponse(output, 400, "Error: Empty text after rule processing.")
+                client.close()
+                return
             }
 
-            if (audioFile != null && audioFile.exists()) {
-                val duration = System.currentTimeMillis() - startTime
-                logToDatabase(originalText, enginePackage, "SUCCESS", duration)
+            // Send chunked HTTP response headers immediately to allow low-latency streaming
+            val header = "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: audio/wav\r\n" +
+                    "Transfer-Encoding: chunked\r\n" +
+                    "Cache-Control: no-cache\r\n" +
+                    "Connection: close\r\n\r\n"
+            output.write(header.toByteArray(Charsets.UTF_8))
+            output.flush()
 
-                val fileLen = audioFile.length()
-                val header = "HTTP/1.1 200 OK\r\n" +
-                        "Content-Type: audio/wav\r\n" +
-                        "Content-Length: $fileLen\r\n" +
-                        "Cache-Control: no-cache\r\n" +
-                        "Connection: close\r\n\r\n"
-                output.write(header.toByteArray(Charsets.UTF_8))
+            // Setup a channel for pipelined synthesis (pre-synthesize up to 2 sentences)
+            val fileChannel = kotlinx.coroutines.channels.Channel<File?>(capacity = 2)
 
-                FileInputStream(audioFile).use { input ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
+            // Start background producer to synthesize sentences one by one
+            val producerJob = serviceScope.launch(Dispatchers.Default) {
+                try {
+                    for (sentence in sentences) {
+                        // Local TTS synthesis uses synthesisMutex, but online TTS can run concurrently!
+                        val file = synthesisMutex.withLock {
+                            synthesizeText(sentence, rate, pitch, enginePackage)
+                        }
+                        fileChannel.send(file)
+                        if (file == null) {
+                            break // Stop if synthesis fails
+                        }
                     }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    fileChannel.close()
                 }
-                output.flush()
-                audioFile.delete()
-            } else {
-                throw Exception("TTS Synthesis failed or file not created.")
+            }
+
+            var isFirstSentence = true
+            var overallSuccess = true
+
+            try {
+                for (audioFile in fileChannel) {
+                    if (audioFile == null || !audioFile.exists()) {
+                        overallSuccess = false
+                        break
+                    }
+
+                    val wavDataOffset = if (isFirstSentence) {
+                        0 // Send full WAV (with header) for the first sentence
+                    } else {
+                        getWavDataOffset(audioFile) // Skip 44-byte WAV header for subsequent sentences
+                    }
+                    isFirstSentence = false
+
+                    FileInputStream(audioFile).use { input ->
+                        if (wavDataOffset > 0) {
+                            val skipped = input.skip(wavDataOffset.toLong())
+                            if (skipped < wavDataOffset) {
+                                val diff = wavDataOffset - skipped.toInt()
+                                if (diff > 0) {
+                                    input.read(ByteArray(diff))
+                                }
+                            }
+                        }
+
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            if (bytesRead > 0) {
+                                val hexSize = java.lang.Integer.toHexString(bytesRead)
+                                output.write("$hexSize\r\n".toByteArray(Charsets.UTF_8))
+                                output.write(buffer, 0, bytesRead)
+                                output.write("\r\n".toByteArray(Charsets.UTF_8))
+                                output.flush() // Extremely important: flush immediately for zero-latency streaming!
+                            }
+                        }
+                    }
+                    // Delete temp file immediately after streaming it
+                    audioFile.delete()
+                }
+
+                if (overallSuccess) {
+                    // Send ending chunk of size 0
+                    output.write("0\r\n\r\n".toByteArray(Charsets.UTF_8))
+                    output.flush()
+
+                    val duration = System.currentTimeMillis() - startTime
+                    logToDatabase(originalText, enginePackage, "SUCCESS", duration)
+                } else {
+                    throw Exception("One or more sentences failed to synthesize.")
+                }
+            } catch (e: Exception) {
+                producerJob.cancel()
+                for (file in fileChannel) {
+                    file?.delete()
+                }
+                throw e
+            } finally {
+                producerJob.join()
             }
         } catch (e: Exception) {
             val duration = System.currentTimeMillis() - startTime
@@ -637,6 +711,113 @@ class TtsServerService : Service() {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "停止服务", stopPendingIntent)
             .setOngoing(true)
             .build()
+    }
+
+    private fun splitTextIntoSentences(text: String): List<String> {
+        if (text.isBlank()) return emptyList()
+        
+        // Do not split by punctuation as requested (this prevents fragmentation and TTS software stopping early).
+        // Standard TTS has a character limit (typically 4000 characters), so we only split when extremely long.
+        val maxLength = 2000
+        if (text.length <= maxLength) {
+            return listOf(text.trim())
+        }
+
+        val result = mutableListOf<String>()
+        val paragraphs = text.split("\n")
+        val currentChunk = StringBuilder()
+
+        for (paragraph in paragraphs) {
+            val trimmed = paragraph.trim()
+            if (trimmed.isEmpty()) continue
+            
+            if (currentChunk.isNotEmpty() && currentChunk.length + trimmed.length + 1 > maxLength) {
+                result.add(currentChunk.toString())
+                currentChunk.clear()
+            }
+            
+            if (trimmed.length > maxLength) {
+                if (currentChunk.isNotEmpty()) {
+                    result.add(currentChunk.toString())
+                    currentChunk.clear()
+                }
+                var start = 0
+                while (start < trimmed.length) {
+                    val end = if (start + maxLength < trimmed.length) start + maxLength else trimmed.length
+                    result.add(trimmed.substring(start, end))
+                    start = end
+                }
+            } else {
+                if (currentChunk.isNotEmpty()) {
+                    currentChunk.append("\n")
+                }
+                currentChunk.append(trimmed)
+            }
+        }
+        if (currentChunk.isNotEmpty()) {
+            result.add(currentChunk.toString())
+        }
+        return if (result.isEmpty()) listOf(text.trim()) else result
+    }
+
+    private fun getWavDataOffset(file: File): Int {
+        if (!file.exists() || file.length() < 44) return 0
+        try {
+            FileInputStream(file).use { fis ->
+                val header = ByteArray(44)
+                val read = fis.read(header)
+                if (read >= 12 &&
+                    header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte() && header[2] == 'F'.code.toByte() && header[3] == 'F'.code.toByte() &&
+                    header[8] == 'W'.code.toByte() && header[9] == 'A'.code.toByte() && header[10] == 'V'.code.toByte() && header[11] == 'E'.code.toByte()) {
+                    
+                    if (read >= 44 && header[36] == 'd'.code.toByte() && header[37] == 'a'.code.toByte() && header[38] == 't'.code.toByte() && header[39] == 'a'.code.toByte()) {
+                        return 44
+                    }
+                    
+                    fis.close()
+                    FileInputStream(file).use { fis2 ->
+                        val buffer = ByteArray(400)
+                        val bytesRead = fis2.read(buffer)
+                        for (idx in 12 until bytesRead - 8) {
+                            if (buffer[idx] == 'd'.code.toByte() && buffer[idx+1] == 'a'.code.toByte() && buffer[idx+2] == 't'.code.toByte() && buffer[idx+3] == 'a'.code.toByte()) {
+                                return idx + 8
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return 44
+    }
+
+    private fun synthesizeToFlow(
+        text: String,
+        rate: Float,
+        pitch: Float,
+        enginePackage: String
+    ): kotlinx.coroutines.flow.Flow<ByteArray> = kotlinx.coroutines.flow.flow {
+        val audioFile = synthesisMutex.withLock {
+            synthesizeText(text, rate, pitch, enginePackage)
+        }
+        if (audioFile != null && audioFile.exists()) {
+            try {
+                FileInputStream(audioFile).use { input ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        if (bytesRead > 0) {
+                            emit(buffer.copyOfRange(0, bytesRead))
+                        }
+                    }
+                }
+            } finally {
+                audioFile.delete()
+            }
+        } else {
+            throw Exception("TTS Synthesis failed")
+        }
     }
 
     private suspend fun processTextRules(originalText: String, db: AppDatabase): String {

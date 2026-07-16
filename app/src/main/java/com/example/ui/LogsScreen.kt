@@ -75,7 +75,7 @@ fun LogsScreen(
                     text = "日志",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -101,7 +101,7 @@ fun LogsScreen(
                     .fillMaxWidth()
                     .weight(1f)
                     .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        MaterialTheme.colorScheme.surfaceContainerLow,
                         RoundedCornerShape(16.dp)
                     ),
                 contentAlignment = Alignment.Center
@@ -145,12 +145,12 @@ fun LogsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                         )
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             val isSuccess = log.status == "SUCCESS"
-                            val statusColor = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            val statusColor = if (isSuccess) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
                             val statusText = if (isSuccess) "转发成功" else "转发失败"
                             val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
                             val formattedTime = timeFormat.format(Date(log.timestamp))
@@ -185,7 +185,7 @@ fun LogsScreen(
                                     text = "${log.length} 字",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
 

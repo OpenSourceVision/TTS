@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -134,7 +135,7 @@ fun RulesScreen(
                         text = "规则",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
                     Row(
@@ -149,9 +150,9 @@ fun RulesScreen(
                                     .testTag("sort_groups_button")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Sort,
+                                    imageVector = Icons.Outlined.Sort,
                                     contentDescription = "排序",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = MaterialTheme.colorScheme.onSurface
                                 )
                             }
 
@@ -169,7 +170,7 @@ fun RulesScreen(
                                         leadingIcon = {
                                             if (sortOrder == order) {
                                                 Icon(
-                                                    imageVector = Icons.Default.Check,
+                                                    imageVector = Icons.Outlined.Check,
                                                     contentDescription = "已选择",
                                                     modifier = Modifier.size(16.dp)
                                                 )
@@ -192,9 +193,9 @@ fun RulesScreen(
                                 .testTag("add_group_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Add,
+                                imageVector = Icons.Outlined.Add,
                                 contentDescription = "新增分组",
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
@@ -205,9 +206,9 @@ fun RulesScreen(
                                 modifier = Modifier.testTag("more_rules_options_button")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.MoreVert,
+                                    imageVector = Icons.Outlined.MoreVert,
                                     contentDescription = "更多选项",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = MaterialTheme.colorScheme.onSurface
                                 )
                             }
                             DropdownMenu(
@@ -222,7 +223,7 @@ fun RulesScreen(
                                     },
                                     leadingIcon = {
                                         Icon(
-                                            imageVector = Icons.Default.Delete,
+                                            imageVector = Icons.Outlined.Delete,
                                             contentDescription = "清空",
                                             modifier = Modifier.size(16.dp),
                                             tint = MaterialTheme.colorScheme.error
@@ -241,7 +242,7 @@ fun RulesScreen(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     placeholder = { Text("搜索分组或词条", style = MaterialTheme.typography.bodyMedium) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(16.dp)) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "Search", modifier = Modifier.size(16.dp)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
@@ -255,7 +256,7 @@ fun RulesScreen(
                                 onClick = { searchQuery = "" },
                                 modifier = Modifier.size(24.dp)
                             ) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                                Icon(Icons.Outlined.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -300,7 +301,7 @@ fun RulesScreen(
                             .testTag("group_card_${group.id}"),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                         ),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f))
                     ) {
@@ -319,7 +320,7 @@ fun RulesScreen(
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Folder,
+                                        imageVector = Icons.Outlined.Folder,
                                         contentDescription = "Group",
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(20.dp)
@@ -359,9 +360,9 @@ fun RulesScreen(
                                             .testTag("add_rule_in_group_${group.id}")
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Add,
+                                            imageVector = Icons.Outlined.Add,
                                             contentDescription = "在此分组新增规则",
-                                            tint = MaterialTheme.colorScheme.primary,
+                                            tint = MaterialTheme.colorScheme.onSurface,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -377,9 +378,9 @@ fun RulesScreen(
                                         modifier = Modifier.size(32.dp)
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Edit,
+                                            imageVector = Icons.Outlined.Edit,
                                             contentDescription = "编辑分组",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            tint = MaterialTheme.colorScheme.onSurface,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -392,7 +393,7 @@ fun RulesScreen(
                                         modifier = Modifier.size(32.dp)
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Delete,
+                                            imageVector = Icons.Outlined.Delete,
                                             contentDescription = "删除分组",
                                             tint = MaterialTheme.colorScheme.error,
                                             modifier = Modifier.size(18.dp)
@@ -400,9 +401,9 @@ fun RulesScreen(
                                     }
 
                                     Icon(
-                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        imageVector = Icons.Outlined.KeyboardArrowDown,
                                         contentDescription = if (isExpanded) "收起" else "展开",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier
                                             .size(18.dp)
                                             .rotate(arrowRotation)
@@ -415,7 +416,7 @@ fun RulesScreen(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
+                                        .background(MaterialTheme.colorScheme.background)
                                         .padding(bottom = 6.dp)
                                 ) {
                                     if (groupRules.isEmpty()) {
@@ -462,16 +463,16 @@ fun RulesScreen(
                                                             style = MaterialTheme.typography.bodyMedium,
                                                             fontFamily = FontFamily.Monospace,
                                                             fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.primary
+                                                            color = MaterialTheme.colorScheme.onSurface
                                                         )
                                                     }
 
                                                     Spacer(modifier = Modifier.width(6.dp))
 
                                                     Icon(
-                                                        imageVector = Icons.Default.ArrowForward,
+                                                        imageVector = Icons.Outlined.ArrowForward,
                                                         contentDescription = "替换为",
-                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        tint = MaterialTheme.colorScheme.onSurface,
                                                         modifier = Modifier.size(12.dp)
                                                     )
 
@@ -490,7 +491,7 @@ fun RulesScreen(
                                                             style = MaterialTheme.typography.bodyMedium,
                                                             fontFamily = FontFamily.Monospace,
                                                             fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.tertiary
+                                                            color = MaterialTheme.colorScheme.onSurface
                                                         )
                                                     }
                                                 }
@@ -517,9 +518,9 @@ fun RulesScreen(
                                                         modifier = Modifier.size(32.dp)
                                                     ) {
                                                         Icon(
-                                                            imageVector = Icons.Default.Edit,
+                                                            imageVector = Icons.Outlined.Edit,
                                                             contentDescription = "编辑规则",
-                                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            tint = MaterialTheme.colorScheme.onSurface,
                                                             modifier = Modifier.size(16.dp)
                                                         )
                                                     }
@@ -531,7 +532,7 @@ fun RulesScreen(
                                                         modifier = Modifier.size(32.dp)
                                                     ) {
                                                         Icon(
-                                                            imageVector = Icons.Default.Delete,
+                                                            imageVector = Icons.Outlined.Delete,
                                                             contentDescription = "删除规则",
                                                             tint = MaterialTheme.colorScheme.error,
                                                             modifier = Modifier.size(16.dp)

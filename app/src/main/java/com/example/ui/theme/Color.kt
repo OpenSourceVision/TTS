@@ -2,21 +2,23 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Tokyo Night Palette (Light & Dark)
-val PrimaryLight = Color(0xFF34548A)
-val SecondaryLight = Color(0xFF0F4B6E)
-val TertiaryLight = Color(0xFF5A4A78)
-val BackgroundLight = Color(0xFFF5F6F9)
-val SurfaceLight = Color(0xFFE1E2E7)
-val SurfaceVariantLight = Color(0xFFE9E9ED)
-val OnSurfaceVariantLight = Color(0xFF565F89)
-val OutlineLight = Color(0xFF8990B5)
+// Light Mode Color Scheme (Minimalist & Blue Accent)
+val BackgroundLight = Color(0xFFF3F4F6) // 优雅软灰，不显苍白
+val CardLight = Color(0xFFFFFFFF)       // 纯白卡片，形成清晰层次
+val PrimaryTextLight = Color(0xFF1A1A1A)
+val SecondaryTextLight = Color(0xFF6B6B6B)
+val DividerLight = Color(0xFFE5E5E5)
+val AccentLight = Color(0xFF2563EB) // 经典克制蓝
 
-val PrimaryDark = Color(0xFF7AA2F7)
-val SecondaryDark = Color(0xFF7DCFFF)
-val TertiaryDark = Color(0xFFBB9AF7)
-val BackgroundDark = Color(0xFF1A1B26)
-val SurfaceDark = Color(0xFF24283B)
-val SurfaceVariantDark = Color(0xFF292E42)
-val OnSurfaceVariantDark = Color(0xFFA9B1D6)
-val OutlineDark = Color(0xFF414868)
+// Dark Mode Color Scheme (Sleek Dark & Soft Blue Accent)
+val BackgroundDark = Color(0xFF1A1B1E)  // 柔和深灰，避免死黑
+val CardDark = Color(0xFF25262B)        // 略浅的卡片，增加层次感
+val PrimaryTextDark = Color(0xFFF5F5F5)
+val SecondaryTextDark = Color(0xFFA0A0A0)
+val DividerDark = Color(0xFF2D2E33)
+val AccentDark = Color(0xFF3B82F6) // 经典亮蓝色
+
+// Semantic Status Colors
+val SuccessColor = Color(0xFF16A34A)
+val WarningColor = Color(0xFFD97706)
+val ErrorColor = Color(0xFFDC2626)
