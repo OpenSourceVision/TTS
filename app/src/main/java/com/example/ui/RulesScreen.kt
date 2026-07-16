@@ -644,7 +644,8 @@ fun RulesScreen(
                         label = { Text("匹配词 / 正则表达式") },
                         placeholder = { Text("例如：重心 或 (\\b行\\b)") },
                         modifier = Modifier.fillMaxWidth().testTag("rule_target_input"),
-                        singleLine = true,
+                        minLines = 3,
+                        maxLines = 6,
                         shape = RoundedCornerShape(12.dp)
                     )
 
