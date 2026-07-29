@@ -9,6 +9,8 @@ import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
+import java.util.Date
+import java.text.SimpleDateFormat
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -276,7 +278,91 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
     fun clearHistory() {
         viewModelScope.launch {
             appDao.clearHistory()
-            _toastEvent.emit("日志已清空")
+            com.example.util.CrashHandler.clearCrashLogs(context)
+            _toastEvent.emit("所有请求日志和崩溃记录已清空")
+        }
+    }
+
+    fun generateLogReport(): String {
+        val sb = StringBuilder()
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val timeStr = dateFormat.format(Date())
+
+        sb.append("=================== TTS 服务错误与运行诊断日志 ===================\n")
+        sb.append("导出时间: ").append(timeStr).append("\n")
+        sb.append("设备品牌: ").append(android.os.Build.MANUFACTURER).append(" ").append(android.os.Build.MODEL).append("\n")
+        sb.append("系统版本: Android ").append(android.os.Build.VERSION.RELEASE).append(" (API ").append(android.os.Build.VERSION.SDK_INT).append(")\n")
+        sb.append("应用包名: ").append(context.packageName).append("\n\n")
+
+        sb.append("------------------- 1. App 未捕获崩溃/闪退堆栈记录 -------------------\n")
+        val crashLogs = com.example.util.CrashHandler.readCrashLogs(context)
+        sb.append(crashLogs).append("\n\n")
+
+        sb.append("------------------- 2. TTS 请求与合成历史/异常记录 -------------------\n")
+        val logs = historyState.value
+        if (logs.isEmpty()) {
+            sb.append("暂无 TTS 转发历史记录\n")
+        } else {
+            logs.forEachIndexed { index, log ->
+                val logTime = dateFormat.format(Date(log.timestamp))
+                sb.append("[$index] 时间: $logTime | 状态: ${log.status} | 耗时: ${log.durationMs}ms | 字数: ${log.length}\n")
+                sb.append("    引擎包名: ${log.enginePackage}\n")
+                sb.append("    请求文本: ${log.text}\n")
+                if (!log.errorMsg.isNullOrBlank()) {
+                    sb.append("    异常/错误明细: ${log.errorMsg}\n")
+                }
+                sb.append("\n")
+            }
+        }
+        sb.append("==================================================================\n")
+
+        return sb.toString()
+    }
+
+    fun copyLogsToClipboard(context: Context) {
+        viewModelScope.launch {
+            try {
+                val report = generateLogReport()
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("TTS Error Logs", report)
+                clipboard.setPrimaryClip(clip)
+                _toastEvent.emit("错误诊断日志已复制到剪切板")
+            } catch (e: Exception) {
+                _toastEvent.emit("复制失败: ${e.message}")
+            }
+        }
+    }
+
+    fun shareLogReport(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val report = generateLogReport()
+                val file = File(context.cacheDir, "tts_error_log.txt")
+                file.writeText(report)
+
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "TTS服务错误诊断日志")
+                    putExtra(Intent.EXTRA_TEXT, report)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+
+                val chooser = Intent.createChooser(intent, "导出/分享错误日志")
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(chooser)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    copyLogsToClipboard(context)
+                }
+            }
         }
     }
 

@@ -66,6 +66,7 @@ class TtsServerService : Service() {
 
     private var activeTts: TextToSpeech? = null
     private var activeEnginePackage: String? = null
+    private val consecutiveFailureCount = java.util.concurrent.atomic.AtomicInteger(0)
     private val synthesisMutex = Mutex()
     // 保留并发限制信号量
     private val requestSemaphore = Semaphore(4)
@@ -221,162 +222,110 @@ class TtsServerService : Service() {
         var text = ""
         var enginePackage = ""
 
-        requestSemaphore.withPermit {
-            // 【关键改动6】：64KB 请求体大小限制拦截（优先检查 Header，超过则直接报 400）
-            val contentLength = call.request.contentLength() ?: 0L
-            if (contentLength > 65536) {
-                call.respondText("Request Body Too Large (Max 64KB)", status = HttpStatusCode.BadRequest)
-                return@withPermit
-            }
-
-            // 【关键改动7】：针对 GET 请求或空 Body，跳过 receiveText 防止 Ktor CIO 管道异常挂起或报错
-            val requestBody = if (call.request.httpMethod == HttpMethod.Get || contentLength == 0L) {
-                ""
-            } else {
-                withTimeoutOrNull(8000) {
-                    try {
-                        call.receiveText()
-                    } catch (e: Throwable) {
-                        ""
-                    }
-                } ?: ""
-            }
-
-            if (requestBody.toByteArray(Charsets.UTF_8).size > 65536) {
-                call.respondText("Request Body Too Large (Max 64KB)", status = HttpStatusCode.BadRequest)
-                return@withPermit
-            }
-
-            // 【关键改动8】：保留完整的参数合并逻辑（Query 参数 + JSON Body / Form Body，保持优先级与别名兼容）
-            val params = mutableMapOf<String, String>()
-            call.request.queryParameters.forEach { key, values ->
-                if (values.isNotEmpty()) {
-                    params[key] = values.first()
+        try {
+            requestSemaphore.withPermit {
+                // 【关键改动6】：64KB 请求体大小限制拦截（优先检查 Header，超过则直接报 400）
+                val contentLength = call.request.contentLength() ?: 0L
+                if (contentLength > 65536) {
+                    call.respondText("Request Body Too Large (Max 64KB)", status = HttpStatusCode.BadRequest)
+                    return@withPermit
                 }
-            }
 
-            if (requestBody.isNotBlank()) {
-                val trimmedBody = requestBody.trim()
-                if (trimmedBody.startsWith("{")) {
-                    try {
-                        val json = org.json.JSONObject(trimmedBody)
-                        val keys = json.keys()
-                        while (keys.hasNext()) {
-                            val k = keys.next()
-                            params[k] = json.optString(k)
-                        }
-                    } catch (e: Throwable) {
-                        // Not valid JSON
-                    }
+                // 【关键改动7】：针对 GET 请求或空 Body，跳过 receiveText 防止 Ktor CIO 管道异常挂起或报错
+                val requestBody = if (call.request.httpMethod == HttpMethod.Get || contentLength == 0L) {
+                    ""
                 } else {
-                    params.putAll(parseQueryParams(trimmedBody))
-                }
-            }
-
-            // 字段别名完全保持一致
-            text = params["text"] ?: params["key"] ?: params["t"] ?: params["txt"] ?: ""
-            if (text.isEmpty()) {
-                call.respondText("Error: 'text' or 'key' parameter is required.", status = HttpStatusCode.BadRequest)
-                return@withPermit
-            }
-
-            val db = AppDatabase.getDatabase(applicationContext)
-            val originalText = text
-            text = processTextRules(originalText, db)
-
-            val settings = db.appDao().getSettings() ?: SettingsEntity()
-
-            val rawRateStr = params["rate"] ?: params["speed"] ?: params["speakSpeed"] ?: params["speechRate"] ?: params["r"] ?: params["s"]
-            val rawRate = rawRateStr?.toFloatOrNull() ?: settings.speechRate
-
-            val rawPitchStr = params["pitch"] ?: params["speakPitch"] ?: params["p"]
-            val rawPitch = rawPitchStr?.toFloatOrNull() ?: settings.pitch
-
-            val rate = normalizeRate(rawRate)
-            val pitch = normalizePitch(rawPitch)
-            enginePackage = params["engine"] ?: params["e"] ?: settings.targetEnginePackage
-
-            val sentences = splitTextIntoSentences(text)
-            if (sentences.isEmpty()) {
-                call.respondText("Error: Empty text after rule processing.", status = HttpStatusCode.BadRequest)
-                return@withPermit
-            }
-
-            // 【关键改动9】：第一句单独处理。在开启响应流之前尝试合成第一句。
-            // 只有当“第一句”合成失败时，才允许返回 4xx/5xx HTTP 错误状态码。
-            val firstSentence = sentences[0]
-            val (firstAudioFile, firstErrorDetails) = synthesisMutex.withLock {
-                synthesizeText(firstSentence, rate, pitch, enginePackage)
-            }
-
-            if (firstAudioFile == null || !firstAudioFile.exists()) {
-                val duration = System.currentTimeMillis() - startTime
-                val errorMsg = firstErrorDetails ?: "First sentence synthesis failed: $firstSentence"
-                logToDatabase(originalText, enginePackage, "FAILED", duration, errorMsg)
-                call.respondText("Error: Failed to synthesize initial audio. ($errorMsg)", status = HttpStatusCode.InternalServerError)
-                return@withPermit
-            }
-
-            // 【关键改动10】：第一句成功后，使用 Ktor 的 respondBytesWriter 原生流式输出（Content-Type: audio/wav）。
-            // 彻底摒弃手写的 16 进制 Chunk 长度和 CRLF 块控制符，从根本上解决流污染问题。
-            try {
-                call.respondBytesWriter(contentType = ContentType("audio", "wav")) {
-                    // 推送第一句音频（0 偏移，保留完整 44 字节 WAV 头）
-                    try {
-                        FileInputStream(firstAudioFile).use { input ->
-                            val buffer = ByteArray(8192)
-                            var bytesRead: Int
-                            while (input.read(buffer).also { bytesRead = it } != -1) {
-                                if (bytesRead > 0) {
-                                    writeFully(buffer, 0, bytesRead)
-                                    flush()
-                                }
-                            }
-                        }
-                    } catch (e: Throwable) {
-                        // 客户端断开连接
-                    } finally {
-                        try { firstAudioFile.delete() } catch (e: Throwable) {}
-                    }
-
-                    // 【关键改动11】：后续单句合成失败容错处理。
-                    // 一旦已经开始写响应体，后续任何句子失败都只记录 SENTENCE_FAILED 日志并“跳过该句”，
-                    // 绝不再尝试写入状态行或错误文本，保证推流数据的干净完整。
-                    var hasSentenceErrors = false
-                    for (i in 1 until sentences.size) {
-                        val sentence = sentences[i]
-                        val (audioFile, sentenceErrorDetails) = synthesisMutex.withLock {
-                            synthesizeText(sentence, rate, pitch, enginePackage)
-                        }
-
-                        if (audioFile == null || !audioFile.exists()) {
-                            hasSentenceErrors = true
-                            val errorMsg = sentenceErrorDetails ?: "Failed to synthesize sentence ${i + 1}: $sentence"
-                            logToDatabase(
-                                text = sentence,
-                                engine = enginePackage,
-                                status = "SENTENCE_FAILED",
-                                durationMs = 0,
-                                errorMsg = errorMsg
-                            )
-                            // 跳过失败句，继续下一句
-                            continue
-                        }
-
+                    withTimeoutOrNull(8000) {
                         try {
-                            // 后续句子跳过 WAV 44 字节头
-                            val wavDataOffset = getWavDataOffset(audioFile)
-                            FileInputStream(audioFile).use { input ->
-                                if (wavDataOffset > 0) {
-                                    val skipped = input.skip(wavDataOffset.toLong())
-                                    if (skipped < wavDataOffset) {
-                                        val diff = wavDataOffset - skipped.toInt()
-                                        if (diff > 0) {
-                                            input.read(ByteArray(diff))
-                                        }
-                                    }
-                                }
+                            call.receiveText()
+                        } catch (e: Throwable) {
+                            ""
+                        }
+                    } ?: ""
+                }
 
+                if (requestBody.toByteArray(Charsets.UTF_8).size > 65536) {
+                    call.respondText("Request Body Too Large (Max 64KB)", status = HttpStatusCode.BadRequest)
+                    return@withPermit
+                }
+
+                // 【关键改动8】：保留完整的参数合并逻辑（Query 参数 + JSON Body / Form Body，保持优先级与别名兼容）
+                val params = mutableMapOf<String, String>()
+                call.request.queryParameters.forEach { key, values ->
+                    if (values.isNotEmpty()) {
+                        params[key] = values.first()
+                    }
+                }
+
+                if (requestBody.isNotBlank()) {
+                    val trimmedBody = requestBody.trim()
+                    if (trimmedBody.startsWith("{")) {
+                        try {
+                            val json = org.json.JSONObject(trimmedBody)
+                            val keys = json.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next()
+                                params[k] = json.optString(k)
+                            }
+                        } catch (e: Throwable) {
+                            // Not valid JSON
+                        }
+                    } else {
+                        params.putAll(parseQueryParams(trimmedBody))
+                    }
+                }
+
+                // 字段别名完全保持一致
+                text = params["text"] ?: params["key"] ?: params["t"] ?: params["txt"] ?: ""
+                if (text.isEmpty()) {
+                    call.respondText("Error: 'text' or 'key' parameter is required.", status = HttpStatusCode.BadRequest)
+                    return@withPermit
+                }
+
+                val db = AppDatabase.getDatabase(applicationContext)
+                val originalText = text
+                text = processTextRules(originalText, db)
+
+                val settings = db.appDao().getSettings() ?: SettingsEntity()
+
+                val rawRateStr = params["rate"] ?: params["speed"] ?: params["speakSpeed"] ?: params["speechRate"] ?: params["r"] ?: params["s"]
+                val rawRate = rawRateStr?.toFloatOrNull() ?: settings.speechRate
+
+                val rawPitchStr = params["pitch"] ?: params["speakPitch"] ?: params["p"]
+                val rawPitch = rawPitchStr?.toFloatOrNull() ?: settings.pitch
+
+                val rate = normalizeRate(rawRate)
+                val pitch = normalizePitch(rawPitch)
+                enginePackage = params["engine"] ?: params["e"] ?: settings.targetEnginePackage
+
+                val sentences = splitTextIntoSentences(text)
+                if (sentences.isEmpty()) {
+                    call.respondText("Error: Empty text after rule processing.", status = HttpStatusCode.BadRequest)
+                    return@withPermit
+                }
+
+                // 【关键改动9】：第一句单独处理。在开启响应流之前尝试合成第一句。
+                // 只有当“第一句”合成失败时，才允许返回 4xx/5xx HTTP 错误状态码。
+                val firstSentence = sentences[0]
+                val (firstAudioFile, firstErrorDetails) = synthesisMutex.withLock {
+                    synthesizeText(firstSentence, rate, pitch, enginePackage)
+                }
+
+                if (firstAudioFile == null || !firstAudioFile.exists()) {
+                    val duration = System.currentTimeMillis() - startTime
+                    val errorMsg = firstErrorDetails ?: "First sentence synthesis failed: $firstSentence"
+                    logToDatabase(originalText, enginePackage, "FAILED", duration, errorMsg)
+                    call.respondText("Error: Failed to synthesize initial audio. ($errorMsg)", status = HttpStatusCode.InternalServerError)
+                    return@withPermit
+                }
+
+                // 【关键改动10】：第一句成功后，使用 Ktor 的 respondBytesWriter 原生流式输出（Content-Type: audio/wav）。
+                // 彻底摒弃手写的 16 进制 Chunk 长度和 CRLF 块控制符，从根本上解决流污染问题。
+                try {
+                    call.respondBytesWriter(contentType = ContentType("audio", "wav")) {
+                        // 推送第一句音频（0 偏移，保留完整 44 字节 WAV 头）
+                        try {
+                            FileInputStream(firstAudioFile).use { input ->
                                 val buffer = ByteArray(8192)
                                 var bytesRead: Int
                                 while (input.read(buffer).also { bytesRead = it } != -1) {
@@ -387,23 +336,86 @@ class TtsServerService : Service() {
                                 }
                             }
                         } catch (e: Throwable) {
-                            // 客户端主动断开，停止后续句子推流
-                            try { audioFile.delete() } catch (ex: Throwable) {}
-                            break
+                            // 客户端断开连接
                         } finally {
-                            try { audioFile.delete() } catch (e: Throwable) {}
+                            try { firstAudioFile.delete() } catch (e: Throwable) {}
                         }
-                    }
 
+                        // 【关键改动11】：后续单句合成失败容错处理。
+                        // 一旦已经开始写响应体，后续任何句子失败都只记录 SENTENCE_FAILED 日志并“跳过该句”，
+                        // 绝不再尝试写入状态行或错误文本，保证推流数据的干净完整。
+                        var hasSentenceErrors = false
+                        for (i in 1 until sentences.size) {
+                            val sentence = sentences[i]
+                            val (audioFile, sentenceErrorDetails) = synthesisMutex.withLock {
+                                synthesizeText(sentence, rate, pitch, enginePackage)
+                            }
+
+                            if (audioFile == null || !audioFile.exists()) {
+                                hasSentenceErrors = true
+                                val errorMsg = sentenceErrorDetails ?: "Failed to synthesize sentence ${i + 1}: $sentence"
+                                logToDatabase(
+                                    text = sentence,
+                                    engine = enginePackage,
+                                    status = "SENTENCE_FAILED",
+                                    durationMs = 0,
+                                    errorMsg = errorMsg
+                                )
+                                // 跳过失败句，继续下一句
+                                continue
+                            }
+
+                            try {
+                                // 后续句子跳过 WAV 44 字节头
+                                val wavDataOffset = getWavDataOffset(audioFile)
+                                FileInputStream(audioFile).use { input ->
+                                    if (wavDataOffset > 0) {
+                                        val skipped = input.skip(wavDataOffset.toLong())
+                                        if (skipped < wavDataOffset) {
+                                            val diff = wavDataOffset - skipped.toInt()
+                                            if (diff > 0) {
+                                                input.read(ByteArray(diff))
+                                            }
+                                        }
+                                    }
+
+                                    val buffer = ByteArray(8192)
+                                    var bytesRead: Int
+                                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                                        if (bytesRead > 0) {
+                                            writeFully(buffer, 0, bytesRead)
+                                            flush()
+                                        }
+                                    }
+                                }
+                            } catch (e: Throwable) {
+                                // 客户端主动断开，停止后续句子推流
+                                try { audioFile.delete() } catch (ex: Throwable) {}
+                                break
+                            } finally {
+                                try { audioFile.delete() } catch (e: Throwable) {}
+                            }
+                        }
+
+                        val duration = System.currentTimeMillis() - startTime
+                        val finalStatus = if (hasSentenceErrors) "PARTIAL_SUCCESS" else "SUCCESS"
+                        logToDatabase(originalText, enginePackage, finalStatus, duration)
+                    }
+                } catch (e: Throwable) {
+                    // 网络中断或客户端主动断开
                     val duration = System.currentTimeMillis() - startTime
-                    val finalStatus = if (hasSentenceErrors) "PARTIAL_SUCCESS" else "SUCCESS"
-                    logToDatabase(originalText, enginePackage, finalStatus, duration)
+                    logToDatabase(originalText, enginePackage, "FAILED", duration, e.message)
                 }
-            } catch (e: Throwable) {
-                // 网络中断或客户端主动断开
-                val duration = System.currentTimeMillis() - startTime
-                logToDatabase(originalText, enginePackage, "FAILED", duration, e.message)
             }
+        } catch (e: Throwable) {
+            val duration = System.currentTimeMillis() - startTime
+            val stackTrace = android.util.Log.getStackTraceString(e)
+            val errorMsg = "CRASH IN REQUEST: ${e.javaClass.name}: ${e.message}\n$stackTrace"
+            e.printStackTrace()
+            logToDatabase(text.ifEmpty { "Legado Request" }, enginePackage.ifEmpty { "System" }, "CRASH", duration, errorMsg)
+            try {
+                call.respondText("Error: Internal server processing exception (${e.message})", status = HttpStatusCode.InternalServerError)
+            } catch (ex: Throwable) {}
         }
     }
 
@@ -429,6 +441,38 @@ class TtsServerService : Service() {
         return calculated.coerceIn(0.1f, 2.0f)
     }
 
+    private suspend fun handleSynthesizeFailure(
+        tempFile: File?,
+        errorMsg: String
+    ): Pair<File?, String?> {
+        // 1. 尝试删除孤儿临时文件
+        if (tempFile != null && tempFile.exists()) {
+            try { tempFile.delete() } catch (e: Throwable) {}
+        }
+
+        // 2. 连续失败计数自增
+        val failures = consecutiveFailureCount.incrementAndGet()
+        var finalErrorMsg = errorMsg
+
+        // 3. 当连续失败达到 3 次时，在 Main 线程主动 shutdown 并清空引擎实例（供下次重新创建）
+        if (failures >= 3) {
+            withContext(Dispatchers.Main) {
+                try {
+                    activeTts?.shutdown()
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                }
+                activeTts = null
+                activeEnginePackage = null
+            }
+            consecutiveFailureCount.set(0)
+            finalErrorMsg += " [检测到引擎连续 3 次合成失败，已自动重置并重新构建 TTS 引擎实例]"
+            android.util.Log.w("TtsServerService", finalErrorMsg)
+        }
+
+        return Pair(null, finalErrorMsg)
+    }
+
     private suspend fun synthesizeText(
         text: String,
         rate: Float,
@@ -445,7 +489,7 @@ class TtsServerService : Service() {
         }
 
         if (tts == null) {
-            return Pair(null, errorDetails ?: "TTS engine initialization failed for package '$enginePackage'")
+            return handleSynthesizeFailure(null, errorDetails ?: "TTS engine initialization failed for package '$enginePackage'")
         }
 
         val utteranceId = "tts_" + System.currentTimeMillis() + "_" + (1000..9999).random()
@@ -456,7 +500,7 @@ class TtsServerService : Service() {
             }
         } catch (e: Throwable) {
             e.printStackTrace()
-            return Pair(null, "Temp file creation failed: ${e.javaClass.name}: ${e.message}")
+            return handleSynthesizeFailure(null, "Temp file creation failed: ${e.javaClass.name}: ${e.message}")
         }
         val deferredResult = CompletableDeferred<Boolean>()
 
@@ -540,31 +584,42 @@ class TtsServerService : Service() {
         }
 
         if (synthResult == TextToSpeech.ERROR) {
-            try { if (tempFile.exists()) tempFile.delete() } catch (e: Throwable) {}
-            return Pair(null, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
+            return handleSynthesizeFailure(tempFile, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
         }
 
         // 使用 withTimeoutOrNull (10秒) 进行单次合成超时保护
-        val success = try {
-            val waitResult = withTimeoutOrNull(10000) {
+        val waitResult = try {
+            withTimeoutOrNull(10000) {
                 deferredResult.await()
             }
-            if (waitResult == null && errorDetails == null) {
-                errorDetails = "UtteranceListener timeout (10s)"
-            }
-            waitResult == true || (tempFile.exists() && tempFile.length() > 0)
         } catch (e: Throwable) {
             if (errorDetails == null) {
                 errorDetails = "deferredResult await exception: ${e.javaClass.name}: ${e.message}"
             }
-            tempFile.exists() && tempFile.length() > 0
+            null
         }
 
+        if (waitResult == null) {
+            // 超时时在 Main 线程主动调用 tts.stop()，打断并清空 TTS 引擎内部任务队列
+            withContext(Dispatchers.Main) {
+                try {
+                    tts.stop()
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                }
+            }
+            if (errorDetails == null) {
+                errorDetails = "UtteranceListener timeout (10s), tts.stop() invoked"
+            }
+        }
+
+        val success = (waitResult == true) || (tempFile.exists() && tempFile.length() > 0)
+
         return if (success && tempFile.exists() && tempFile.length() > 0) {
+            consecutiveFailureCount.set(0)
             Pair(tempFile, null)
         } else {
-            try { if (tempFile.exists()) tempFile.delete() } catch (e: Throwable) {}
-            Pair(null, errorDetails ?: "Synthesized audio file missing or empty (0 bytes)")
+            handleSynthesizeFailure(tempFile, errorDetails ?: "Synthesized audio file missing or empty (0 bytes)")
         }
     }
 
