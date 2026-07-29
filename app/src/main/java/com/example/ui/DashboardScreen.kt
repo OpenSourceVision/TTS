@@ -367,8 +367,9 @@ fun DashboardScreen(
                     label = { Text("测试文本") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(85.dp)
+                        .height(110.dp)
                         .testTag("test_text_field"),
+                    minLines = 3,
                     maxLines = 3
                 )
             }

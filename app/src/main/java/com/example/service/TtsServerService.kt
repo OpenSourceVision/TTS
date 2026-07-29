@@ -341,9 +341,7 @@ class TtsServerService : Service() {
                             try { firstAudioFile.delete() } catch (e: Throwable) {}
                         }
 
-                        // 【关键改动11】：后续单句合成失败容错处理。
-                        // 一旦已经开始写响应体，后续任何句子失败都只记录 SENTENCE_FAILED 日志并“跳过该句”，
-                        // 绝不再尝试写入状态行或错误文本，保证推流数据的干净完整。
+                        // 取消合成失败跳过逻辑：后续单句合成失败立刻中断推流并终止
                         var hasSentenceErrors = false
                         for (i in 1 until sentences.size) {
                             val sentence = sentences[i]
@@ -357,12 +355,12 @@ class TtsServerService : Service() {
                                 logToDatabase(
                                     text = sentence,
                                     engine = enginePackage,
-                                    status = "SENTENCE_FAILED",
-                                    durationMs = 0,
+                                    status = "FAILED",
+                                    durationMs = System.currentTimeMillis() - startTime,
                                     errorMsg = errorMsg
                                 )
-                                // 跳过失败句，继续下一句
-                                continue
+                                // 取消合成失败就跳过，直接中断后续推流
+                                break
                             }
 
                             try {
@@ -587,9 +585,9 @@ class TtsServerService : Service() {
             return handleSynthesizeFailure(tempFile, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
         }
 
-        // 使用 withTimeoutOrNull (10秒) 进行单次合成超时保护
+        // 使用 withTimeoutOrNull (15秒) 进行单次合成超时保护
         val waitResult = try {
-            withTimeoutOrNull(10000) {
+            withTimeoutOrNull(15000) {
                 deferredResult.await()
             }
         } catch (e: Throwable) {
@@ -609,7 +607,7 @@ class TtsServerService : Service() {
                 }
             }
             if (errorDetails == null) {
-                errorDetails = "UtteranceListener timeout (10s), tts.stop() invoked"
+                errorDetails = "UtteranceListener timeout (15s), tts.stop() invoked"
             }
         }
 
@@ -796,20 +794,17 @@ class TtsServerService : Service() {
     private fun splitTextIntoSentences(text: String): List<String> {
         if (text.isBlank()) return emptyList()
 
-        val maxLength = 2000
-        if (text.length <= maxLength) {
-            return listOf(text.trim())
-        }
-
+        val maxLength = 300
         val result = mutableListOf<String>()
-        val paragraphs = text.split("\n")
+        // 优先根据标点符号（句号、问号、感叹号、分号、换行）进行自然分句
+        val rawSentences = text.split(Regex("(?<=[。！？\n；;])"))
         val currentChunk = StringBuilder()
 
-        for (paragraph in paragraphs) {
-            val trimmed = paragraph.trim()
+        for (raw in rawSentences) {
+            val trimmed = raw.trim()
             if (trimmed.isEmpty()) continue
 
-            if (currentChunk.isNotEmpty() && currentChunk.length + trimmed.length + 1 > maxLength) {
+            if (currentChunk.isNotEmpty() && currentChunk.length + trimmed.length > maxLength) {
                 result.add(currentChunk.toString())
                 currentChunk.clear()
             }
@@ -826,9 +821,6 @@ class TtsServerService : Service() {
                     start = end
                 }
             } else {
-                if (currentChunk.isNotEmpty()) {
-                    currentChunk.append("\n")
-                }
                 currentChunk.append(trimmed)
             }
         }
