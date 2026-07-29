@@ -19,6 +19,7 @@ import com.example.data.HistoryEntity
 import com.example.data.SettingsEntity
 import com.example.data.TextRuleProcessor
 import io.ktor.http.ContentType
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
@@ -26,6 +27,7 @@ import io.ktor.server.cio.CIO
 import io.ktor.server.engine.ApplicationEngine
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.request.contentLength
+import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.response.respondText
@@ -97,8 +99,36 @@ class TtsServerService : Service() {
             settingsJob?.cancel()
             settingsJob = null
             stopServer()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
             stopSelf()
             return START_NOT_STICKY
+        }
+
+        // 立即调用 startForeground 满足 Android 8.0+ / 12+ / 14+ 前台服务 5 秒超时限制，防止闪退
+        val initialPort = if (_serverPort.value > 0) _serverPort.value else 8080
+        val initialEngineLabel = if (_activeEngine.value.isNotBlank()) getEngineLabel(_activeEngine.value) else "系统默认"
+        val initialNotification = buildNotification(initialPort, initialEngineLabel)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    initialNotification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(
+                    NOTIFICATION_ID,
+                    initialNotification
+                )
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, initialNotification)
         }
 
         settingsJob?.cancel()
@@ -123,23 +153,6 @@ class TtsServerService : Service() {
 
                     val manager = getSystemService(NotificationManager::class.java)
                     manager?.notify(NOTIFICATION_ID, notification)
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            startForeground(
-                                NOTIFICATION_ID,
-                                notification,
-                                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-                            )
-                        } else {
-                            startForeground(
-                                NOTIFICATION_ID,
-                                notification
-                            )
-                        }
-                    } else {
-                        startForeground(NOTIFICATION_ID, notification)
-                    }
                 }
             }
         }
@@ -216,14 +229,18 @@ class TtsServerService : Service() {
                 return@withPermit
             }
 
-            // 【关键改动7】：8 秒超时读取请求体，防止挂起
-            val requestBody = withTimeoutOrNull(8000) {
-                try {
-                    call.receiveText()
-                } catch (e: Exception) {
-                    ""
-                }
-            } ?: ""
+            // 【关键改动7】：针对 GET 请求或空 Body，跳过 receiveText 防止 Ktor CIO 管道异常挂起或报错
+            val requestBody = if (call.request.httpMethod == HttpMethod.Get || contentLength == 0L) {
+                ""
+            } else {
+                withTimeoutOrNull(8000) {
+                    try {
+                        call.receiveText()
+                    } catch (e: Throwable) {
+                        ""
+                    }
+                } ?: ""
+            }
 
             if (requestBody.toByteArray(Charsets.UTF_8).size > 65536) {
                 call.respondText("Request Body Too Large (Max 64KB)", status = HttpStatusCode.BadRequest)
@@ -248,7 +265,7 @@ class TtsServerService : Service() {
                             val k = keys.next()
                             params[k] = json.optString(k)
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         // Not valid JSON
                     }
                 } else {
@@ -288,14 +305,15 @@ class TtsServerService : Service() {
             // 【关键改动9】：第一句单独处理。在开启响应流之前尝试合成第一句。
             // 只有当“第一句”合成失败时，才允许返回 4xx/5xx HTTP 错误状态码。
             val firstSentence = sentences[0]
-            val firstAudioFile = synthesisMutex.withLock {
+            val (firstAudioFile, firstErrorDetails) = synthesisMutex.withLock {
                 synthesizeText(firstSentence, rate, pitch, enginePackage)
             }
 
             if (firstAudioFile == null || !firstAudioFile.exists()) {
                 val duration = System.currentTimeMillis() - startTime
-                logToDatabase(originalText, enginePackage, "FAILED", duration, "First sentence synthesis failed: $firstSentence")
-                call.respondText("Error: Failed to synthesize initial audio.", status = HttpStatusCode.InternalServerError)
+                val errorMsg = firstErrorDetails ?: "First sentence synthesis failed: $firstSentence"
+                logToDatabase(originalText, enginePackage, "FAILED", duration, errorMsg)
+                call.respondText("Error: Failed to synthesize initial audio. ($errorMsg)", status = HttpStatusCode.InternalServerError)
                 return@withPermit
             }
 
@@ -315,8 +333,10 @@ class TtsServerService : Service() {
                                 }
                             }
                         }
+                    } catch (e: Throwable) {
+                        // 客户端断开连接
                     } finally {
-                        firstAudioFile.delete()
+                        try { firstAudioFile.delete() } catch (e: Throwable) {}
                     }
 
                     // 【关键改动11】：后续单句合成失败容错处理。
@@ -325,18 +345,19 @@ class TtsServerService : Service() {
                     var hasSentenceErrors = false
                     for (i in 1 until sentences.size) {
                         val sentence = sentences[i]
-                        val audioFile = synthesisMutex.withLock {
+                        val (audioFile, sentenceErrorDetails) = synthesisMutex.withLock {
                             synthesizeText(sentence, rate, pitch, enginePackage)
                         }
 
                         if (audioFile == null || !audioFile.exists()) {
                             hasSentenceErrors = true
+                            val errorMsg = sentenceErrorDetails ?: "Failed to synthesize sentence ${i + 1}: $sentence"
                             logToDatabase(
                                 text = sentence,
                                 engine = enginePackage,
                                 status = "SENTENCE_FAILED",
                                 durationMs = 0,
-                                errorMsg = "Failed to synthesize sentence ${i + 1}: $sentence"
+                                errorMsg = errorMsg
                             )
                             // 跳过失败句，继续下一句
                             continue
@@ -365,8 +386,12 @@ class TtsServerService : Service() {
                                     }
                                 }
                             }
+                        } catch (e: Throwable) {
+                            // 客户端主动断开，停止后续句子推流
+                            try { audioFile.delete() } catch (ex: Throwable) {}
+                            break
                         } finally {
-                            audioFile.delete()
+                            try { audioFile.delete() } catch (e: Throwable) {}
                         }
                     }
 
@@ -374,7 +399,7 @@ class TtsServerService : Service() {
                     val finalStatus = if (hasSentenceErrors) "PARTIAL_SUCCESS" else "SUCCESS"
                     logToDatabase(originalText, enginePackage, finalStatus, duration)
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 // 网络中断或客户端主动断开
                 val duration = System.currentTimeMillis() - startTime
                 logToDatabase(originalText, enginePackage, "FAILED", duration, e.message)
@@ -409,21 +434,18 @@ class TtsServerService : Service() {
         rate: Float,
         pitch: Float,
         enginePackage: String
-    ): File? {
-        val tts = getTtsInstance(enginePackage) ?: return null
+    ): Pair<File?, String?> {
+        var errorDetails: String? = null
 
-        withContext(Dispatchers.Main) {
-            val hasChinese = text.any { it.code in 0x4E00..0x9FFF }
-            if (hasChinese) {
-                val result = tts.setLanguage(Locale.SIMPLIFIED_CHINESE)
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    tts.setLanguage(Locale.CHINESE)
-                }
-            } else {
-                tts.setLanguage(Locale.getDefault())
-            }
-            tts.setSpeechRate(rate)
-            tts.setPitch(pitch)
+        val tts = try {
+            getTtsInstance(enginePackage)
+        } catch (e: Throwable) {
+            errorDetails = "getTtsInstance exception: ${e.javaClass.name}: ${e.message}"
+            null
+        }
+
+        if (tts == null) {
+            return Pair(null, errorDetails ?: "TTS engine initialization failed for package '$enginePackage'")
         }
 
         val utteranceId = "tts_" + System.currentTimeMillis() + "_" + (1000..9999).random()
@@ -432,44 +454,94 @@ class TtsServerService : Service() {
             if (!tempFile.exists()) {
                 tempFile.createNewFile()
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
+            return Pair(null, "Temp file creation failed: ${e.javaClass.name}: ${e.message}")
         }
         val deferredResult = CompletableDeferred<Boolean>()
 
-        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String) {
-            }
-
-            override fun onDone(id: String) {
-                if (id == utteranceId) {
-                    deferredResult.complete(true)
-                }
-            }
-
-            override fun onError(id: String) {
-                if (id == utteranceId) {
-                    deferredResult.complete(false)
-                }
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(id: String, errorCode: Int) {
-                if (id == utteranceId) {
-                    deferredResult.complete(false)
-                }
-            }
-        })
-
         val bundle = Bundle()
-        bundle.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+        try {
+            bundle.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+        } catch (e: Throwable) {
+            // ignore bundle write errors
+        }
 
         val synthResult = withContext(Dispatchers.Main) {
-            tts.synthesizeToFile(text, bundle, tempFile, utteranceId)
+            try {
+                // 1. 设置进度监听器 (加 try-catch 保护)
+                try {
+                    tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(id: String) {}
+
+                        override fun onDone(id: String) {
+                            if (id == utteranceId) {
+                                try { deferredResult.complete(true) } catch (e: Throwable) {}
+                            }
+                        }
+
+                        override fun onError(id: String) {
+                            if (id == utteranceId) {
+                                try { deferredResult.complete(false) } catch (e: Throwable) {}
+                            }
+                        }
+
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(id: String, errorCode: Int) {
+                            if (id == utteranceId) {
+                                try { deferredResult.complete(false) } catch (e: Throwable) {}
+                            }
+                        }
+                    })
+                } catch (e: Throwable) {
+                    errorDetails = "setOnUtteranceProgressListener error: ${e.javaClass.name}: ${e.message}"
+                }
+
+                // 2. 设置语言 (加 try-catch 保护)
+                try {
+                    val hasChinese = text.any { it.code in 0x4E00..0x9FFF }
+                    if (hasChinese) {
+                        val result = tts.setLanguage(Locale.SIMPLIFIED_CHINESE)
+                        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                            tts.setLanguage(Locale.CHINESE)
+                        }
+                    } else {
+                        tts.setLanguage(Locale.getDefault())
+                    }
+                } catch (e: Throwable) {
+                    if (errorDetails == null) {
+                        errorDetails = "setLanguage error: ${e.javaClass.name}: ${e.message}"
+                    }
+                }
+
+                // 3. 设置语速和音调 (加 try-catch 保护)
+                try {
+                    tts.setSpeechRate(rate)
+                } catch (e: Throwable) {
+                    if (errorDetails == null) {
+                        errorDetails = "setSpeechRate error: ${e.javaClass.name}: ${e.message}"
+                    }
+                }
+
+                try {
+                    tts.setPitch(pitch)
+                } catch (e: Throwable) {
+                    if (errorDetails == null) {
+                        errorDetails = "setPitch error: ${e.javaClass.name}: ${e.message}"
+                    }
+                }
+
+                // 4. 合成音频文件 (加 try-catch 保护)
+                tts.synthesizeToFile(text, bundle, tempFile, utteranceId)
+            } catch (e: Throwable) {
+                errorDetails = "synthesizeToFile exception: ${e.javaClass.name}: ${e.message}"
+                TextToSpeech.ERROR
+            }
         }
 
         if (synthResult == TextToSpeech.ERROR) {
-            return null
+            try { if (tempFile.exists()) tempFile.delete() } catch (e: Throwable) {}
+            return Pair(null, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
         }
 
         // 使用 withTimeoutOrNull (10秒) 进行单次合成超时保护
@@ -477,61 +549,106 @@ class TtsServerService : Service() {
             val waitResult = withTimeoutOrNull(10000) {
                 deferredResult.await()
             }
+            if (waitResult == null && errorDetails == null) {
+                errorDetails = "UtteranceListener timeout (10s)"
+            }
             waitResult == true || (tempFile.exists() && tempFile.length() > 0)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (errorDetails == null) {
+                errorDetails = "deferredResult await exception: ${e.javaClass.name}: ${e.message}"
+            }
             tempFile.exists() && tempFile.length() > 0
         }
 
-        return if (success && tempFile.exists()) tempFile else null
+        return if (success && tempFile.exists() && tempFile.length() > 0) {
+            Pair(tempFile, null)
+        } else {
+            try { if (tempFile.exists()) tempFile.delete() } catch (e: Throwable) {}
+            Pair(null, errorDetails ?: "Synthesized audio file missing or empty (0 bytes)")
+        }
     }
 
     private suspend fun getTtsInstance(enginePackage: String): TextToSpeech? = withContext(Dispatchers.Main) {
-        if (activeTts != null && activeEnginePackage == enginePackage) {
-            return@withContext activeTts
-        }
+        try {
+            if (activeTts != null && activeEnginePackage == enginePackage) {
+                return@withContext activeTts
+            }
 
-        activeTts?.shutdown()
-        activeTts = null
-        activeEnginePackage = null
+            try {
+                activeTts?.shutdown()
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+            activeTts = null
+            activeEnginePackage = null
 
-        val deferred = CompletableDeferred<Int>()
-        var tts = TextToSpeech(applicationContext, { status ->
-            deferred.complete(status)
-        }, enginePackage)
+            val deferred = CompletableDeferred<Int>()
+            var tts: TextToSpeech? = null
 
-        var isFallback = false
-        var status = try {
-            withTimeoutOrNull(5000) {
-                deferred.await()
-            } ?: TextToSpeech.ERROR
-        } catch (e: Exception) {
-            TextToSpeech.ERROR
-        }
+            if (enginePackage.isNotBlank()) {
+                try {
+                    tts = TextToSpeech(applicationContext, { status ->
+                        try { deferred.complete(status) } catch (e: Throwable) {}
+                    }, enginePackage)
+                } catch (e: Throwable) {
+                    tts = null
+                    e.printStackTrace()
+                }
+            }
 
-        if (status != TextToSpeech.SUCCESS) {
-            isFallback = true
-            try { tts.shutdown() } catch (e: Exception) {}
-
-            val fallbackDeferred = CompletableDeferred<Int>()
-            tts = TextToSpeech(applicationContext, { s ->
-                fallbackDeferred.complete(s)
-            })
-
-            status = try {
-                withTimeoutOrNull(5000) {
-                    fallbackDeferred.await()
-                } ?: TextToSpeech.ERROR
-            } catch (e: Exception) {
+            var isFallback = false
+            var status = if (tts != null) {
+                try {
+                    withTimeoutOrNull(5000) {
+                        deferred.await()
+                    } ?: TextToSpeech.ERROR
+                } catch (e: Throwable) {
+                    TextToSpeech.ERROR
+                }
+            } else {
                 TextToSpeech.ERROR
             }
-        }
 
-        if (status == TextToSpeech.SUCCESS) {
-            activeTts = tts
-            activeEnginePackage = if (isFallback) (tts.defaultEngine ?: enginePackage) else enginePackage
-            tts
-        } else {
-            try { tts.shutdown() } catch (e: Exception) {}
+            if (status != TextToSpeech.SUCCESS) {
+                isFallback = true
+                try { tts?.shutdown() } catch (e: Throwable) {}
+
+                val fallbackDeferred = CompletableDeferred<Int>()
+                tts = try {
+                    TextToSpeech(applicationContext) { s ->
+                        try { fallbackDeferred.complete(s) } catch (e: Throwable) {}
+                    }
+                } catch (e: Throwable) {
+                    null
+                }
+
+                status = if (tts != null) {
+                    try {
+                        withTimeoutOrNull(5000) {
+                            fallbackDeferred.await()
+                        } ?: TextToSpeech.ERROR
+                    } catch (e: Throwable) {
+                        TextToSpeech.ERROR
+                    }
+                } else {
+                    TextToSpeech.ERROR
+                }
+            }
+
+            if (status == TextToSpeech.SUCCESS && tts != null) {
+                activeTts = tts
+                activeEnginePackage = if (isFallback) {
+                    try { tts.defaultEngine ?: enginePackage } catch (e: Throwable) { enginePackage }
+                } else {
+                    enginePackage
+                }
+                tts
+            } else {
+                try { tts?.shutdown() } catch (e: Throwable) {}
+                null
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
             null
         }
     }
