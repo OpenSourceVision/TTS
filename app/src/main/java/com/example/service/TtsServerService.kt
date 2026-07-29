@@ -298,34 +298,27 @@ class TtsServerService : Service() {
                 val pitch = normalizePitch(rawPitch)
                 enginePackage = params["engine"] ?: params["e"] ?: settings.targetEnginePackage
 
-                val sentences = splitTextIntoSentences(text)
-                if (sentences.isEmpty()) {
+                if (text.isBlank()) {
                     call.respondText("Error: Empty text after rule processing.", status = HttpStatusCode.BadRequest)
                     return@withPermit
                 }
 
-                // 【关键改动9】：第一句单独处理。在开启响应流之前尝试合成第一句。
-                // 只有当“第一句”合成失败时，才允许返回 4xx/5xx HTTP 错误状态码。
-                val firstSentence = sentences[0]
-                val (firstAudioFile, firstErrorDetails) = synthesisMutex.withLock {
-                    synthesizeText(firstSentence, rate, pitch, enginePackage)
+                val (audioFile, errorDetails) = synthesisMutex.withLock {
+                    synthesizeText(text, rate, pitch, enginePackage)
                 }
 
-                if (firstAudioFile == null || !firstAudioFile.exists()) {
+                if (audioFile == null || !audioFile.exists()) {
                     val duration = System.currentTimeMillis() - startTime
-                    val errorMsg = firstErrorDetails ?: "First sentence synthesis failed: $firstSentence"
+                    val errorMsg = errorDetails ?: "Synthesis failed for text: $text"
                     logToDatabase(originalText, enginePackage, "FAILED", duration, errorMsg)
-                    call.respondText("Error: Failed to synthesize initial audio. ($errorMsg)", status = HttpStatusCode.InternalServerError)
+                    call.respondText("Error: Failed to synthesize audio. ($errorMsg)", status = HttpStatusCode.InternalServerError)
                     return@withPermit
                 }
 
-                // 【关键改动10】：第一句成功后，使用 Ktor 的 respondBytesWriter 原生流式输出（Content-Type: audio/wav）。
-                // 彻底摒弃手写的 16 进制 Chunk 长度和 CRLF 块控制符，从根本上解决流污染问题。
                 try {
                     call.respondBytesWriter(contentType = ContentType("audio", "wav")) {
-                        // 推送第一句音频（0 偏移，保留完整 44 字节 WAV 头）
                         try {
-                            FileInputStream(firstAudioFile).use { input ->
+                            FileInputStream(audioFile).use { input ->
                                 val buffer = ByteArray(8192)
                                 var bytesRead: Int
                                 while (input.read(buffer).also { bytesRead = it } != -1) {
@@ -335,72 +328,17 @@ class TtsServerService : Service() {
                                     }
                                 }
                             }
+                            val duration = System.currentTimeMillis() - startTime
+                            logToDatabase(originalText, enginePackage, "SUCCESS", duration)
                         } catch (e: Throwable) {
                             // 客户端断开连接
+                            val duration = System.currentTimeMillis() - startTime
+                            logToDatabase(originalText, enginePackage, "CANCELLED", duration, e.message)
                         } finally {
-                            try { firstAudioFile.delete() } catch (e: Throwable) {}
+                            try { audioFile.delete() } catch (e: Throwable) {}
                         }
-
-                        // 取消合成失败跳过逻辑：后续单句合成失败立刻中断推流并终止
-                        var hasSentenceErrors = false
-                        for (i in 1 until sentences.size) {
-                            val sentence = sentences[i]
-                            val (audioFile, sentenceErrorDetails) = synthesisMutex.withLock {
-                                synthesizeText(sentence, rate, pitch, enginePackage)
-                            }
-
-                            if (audioFile == null || !audioFile.exists()) {
-                                hasSentenceErrors = true
-                                val errorMsg = sentenceErrorDetails ?: "Failed to synthesize sentence ${i + 1}: $sentence"
-                                logToDatabase(
-                                    text = sentence,
-                                    engine = enginePackage,
-                                    status = "FAILED",
-                                    durationMs = System.currentTimeMillis() - startTime,
-                                    errorMsg = errorMsg
-                                )
-                                // 取消合成失败就跳过，直接中断后续推流
-                                break
-                            }
-
-                            try {
-                                // 后续句子跳过 WAV 44 字节头
-                                val wavDataOffset = getWavDataOffset(audioFile)
-                                FileInputStream(audioFile).use { input ->
-                                    if (wavDataOffset > 0) {
-                                        val skipped = input.skip(wavDataOffset.toLong())
-                                        if (skipped < wavDataOffset) {
-                                            val diff = wavDataOffset - skipped.toInt()
-                                            if (diff > 0) {
-                                                input.read(ByteArray(diff))
-                                            }
-                                        }
-                                    }
-
-                                    val buffer = ByteArray(8192)
-                                    var bytesRead: Int
-                                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                                        if (bytesRead > 0) {
-                                            writeFully(buffer, 0, bytesRead)
-                                            flush()
-                                        }
-                                    }
-                                }
-                            } catch (e: Throwable) {
-                                // 客户端主动断开，停止后续句子推流
-                                try { audioFile.delete() } catch (ex: Throwable) {}
-                                break
-                            } finally {
-                                try { audioFile.delete() } catch (e: Throwable) {}
-                            }
-                        }
-
-                        val duration = System.currentTimeMillis() - startTime
-                        val finalStatus = if (hasSentenceErrors) "PARTIAL_SUCCESS" else "SUCCESS"
-                        logToDatabase(originalText, enginePackage, finalStatus, duration)
                     }
                 } catch (e: Throwable) {
-                    // 网络中断或客户端主动断开
                     val duration = System.currentTimeMillis() - startTime
                     logToDatabase(originalText, enginePackage, "FAILED", duration, e.message)
                 }
@@ -789,77 +727,6 @@ class TtsServerService : Service() {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "停止服务", stopPendingIntent)
             .setOngoing(true)
             .build()
-    }
-
-    private fun splitTextIntoSentences(text: String): List<String> {
-        if (text.isBlank()) return emptyList()
-
-        val maxLength = 300
-        val result = mutableListOf<String>()
-        // 优先根据标点符号（句号、问号、感叹号、分号、换行）进行自然分句
-        val rawSentences = text.split(Regex("(?<=[。！？\n；;])"))
-        val currentChunk = StringBuilder()
-
-        for (raw in rawSentences) {
-            val trimmed = raw.trim()
-            if (trimmed.isEmpty()) continue
-
-            if (currentChunk.isNotEmpty() && currentChunk.length + trimmed.length > maxLength) {
-                result.add(currentChunk.toString())
-                currentChunk.clear()
-            }
-
-            if (trimmed.length > maxLength) {
-                if (currentChunk.isNotEmpty()) {
-                    result.add(currentChunk.toString())
-                    currentChunk.clear()
-                }
-                var start = 0
-                while (start < trimmed.length) {
-                    val end = if (start + maxLength < trimmed.length) start + maxLength else trimmed.length
-                    result.add(trimmed.substring(start, end))
-                    start = end
-                }
-            } else {
-                currentChunk.append(trimmed)
-            }
-        }
-        if (currentChunk.isNotEmpty()) {
-            result.add(currentChunk.toString())
-        }
-        return if (result.isEmpty()) listOf(text.trim()) else result
-    }
-
-    private fun getWavDataOffset(file: File): Int {
-        if (!file.exists() || file.length() < 44) return 0
-        try {
-            FileInputStream(file).use { fis ->
-                val header = ByteArray(44)
-                val read = fis.read(header)
-                if (read >= 12 &&
-                    header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte() && header[2] == 'F'.code.toByte() && header[3] == 'F'.code.toByte() &&
-                    header[8] == 'W'.code.toByte() && header[9] == 'A'.code.toByte() && header[10] == 'V'.code.toByte() && header[11] == 'E'.code.toByte()) {
-
-                    if (read >= 44 && header[36] == 'd'.code.toByte() && header[37] == 'a'.code.toByte() && header[38] == 't'.code.toByte() && header[39] == 'a'.code.toByte()) {
-                        return 44
-                    }
-
-                    fis.close()
-                    FileInputStream(file).use { fis2 ->
-                        val buffer = ByteArray(400)
-                        val bytesRead = fis2.read(buffer)
-                        for (idx in 12 until bytesRead - 8) {
-                            if (buffer[idx] == 'd'.code.toByte() && buffer[idx+1] == 'a'.code.toByte() && buffer[idx+2] == 't'.code.toByte() && buffer[idx+3] == 'a'.code.toByte()) {
-                                return idx + 8
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return 44
     }
 
     private suspend fun processTextRules(originalText: String, db: AppDatabase): String {
