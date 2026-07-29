@@ -362,36 +362,13 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    if (!isBatteryOptimizing) {
-                        OutlinedButton(
-                            onClick = {
-                                viewModel.requestIgnoreBatteryOptimizations(context)
-                                isBatteryOptimizing = viewModel.isIgnoringBatteryOptimizations(context)
-                            },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                            modifier = Modifier
-                                .height(32.dp)
-                                .testTag("battery_optimization_button")
-                        ) {
-                            Text("加入", style = MaterialTheme.typography.bodySmall)
-                        }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Outlined.Check,
-                                contentDescription = "已加入",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "已加入",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+                    Switch(
+                        checked = isBatteryOptimizing,
+                        onCheckedChange = {
+                            viewModel.requestIgnoreBatteryOptimizations(context)
+                        },
+                        modifier = Modifier.testTag("battery_optimization_button")
+                    )
                 }
             }
         }
@@ -721,69 +698,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 5. Cache Clearing Card
-        Text(
-            text = "缓存清理",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        var cacheSize by remember { mutableStateOf("0.00 B") }
-        LaunchedEffect(Unit) {
-            cacheSize = viewModel.getCacheSize(context)
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            )
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "TTS音频缓存",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "已占用: $cacheSize",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {
-                            viewModel.clearCache(context) {
-                                cacheSize = viewModel.getCacheSize(context)
-                            }
-                        },
-                        modifier = Modifier.testTag("clear_cache_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Delete,
-                            contentDescription = "清理",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 6. Version Info Card
+        // 5. Version Info Card
         Text(
             text = "版本信息",
             style = MaterialTheme.typography.titleMedium,
