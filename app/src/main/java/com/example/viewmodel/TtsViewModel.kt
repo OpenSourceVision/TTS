@@ -24,8 +24,12 @@ import com.example.data.RuleCache
 import com.example.data.TextRuleProcessor
 import com.example.data.WebDavHelper
 import com.example.data.BackupPackage
+import com.example.data.WebDavConfigPackage
+import com.example.data.CombinedBackupPackage
 import com.example.data.toJsonString
-import com.example.data.parseSettingsFromJson
+import com.example.data.toRuleSettingsJsonString
+import com.example.data.toWebDavConfigJsonString
+import com.example.data.parseRuleSettingsFromJson
 import com.example.service.TtsServerService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -890,23 +894,48 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                     onResult(Result.failure(Exception("请先配置 WebDav 服务器地址")))
                     return@launch
                 }
-                val rulesStr = exportRulesToJsonString()
-                val settingsStr = settings.toJsonString()
-                val pkg = BackupPackage(version = 1, rulesJson = rulesStr, settingsJson = settingsStr)
-                val jsonContent = pkg.toJsonString()
 
-                val result = WebDavHelper.uploadFile(
+                // 1. 上传规则配置文件 (仅包含替换规则)
+                val rulesStr = exportRulesToJsonString()
+                val rulesPkg = BackupPackage(version = 1, rulesJson = rulesStr)
+                val rulesFileName = if (settings.webdavPath.isNotBlank()) settings.webdavPath else "tts_rules_backup.json"
+                val rulesResult = WebDavHelper.uploadFile(
                     url = settings.webdavUrl,
                     username = settings.webdavUsername,
                     password = settings.webdavPassword,
                     dirName = settings.webdavDir,
-                    fileName = settings.webdavPath,
-                    content = jsonContent
+                    fileName = rulesFileName,
+                    content = rulesPkg.toJsonString()
                 )
-                if (result.isSuccess) {
-                    _toastEvent.emit("云端备份成功")
+                if (rulesResult.isFailure) {
+                    onResult(rulesResult)
+                    return@launch
                 }
-                onResult(result)
+
+                // 2. 上传 WebDAV 配置文件
+                val webdavPkg = WebDavConfigPackage(
+                    version = 1,
+                    webdavUrl = settings.webdavUrl,
+                    webdavUsername = settings.webdavUsername,
+                    webdavPassword = settings.webdavPassword,
+                    webdavDir = settings.webdavDir,
+                    webdavPath = settings.webdavPath
+                )
+                val webdavResult = WebDavHelper.uploadFile(
+                    url = settings.webdavUrl,
+                    username = settings.webdavUsername,
+                    password = settings.webdavPassword,
+                    dirName = settings.webdavDir,
+                    fileName = "webdav_config.json",
+                    content = webdavPkg.toJsonString()
+                )
+
+                if (webdavResult.isSuccess) {
+                    _toastEvent.emit("云端备份成功")
+                    onResult(Result.success(Unit))
+                } else {
+                    onResult(webdavResult)
+                }
             } catch (e: Exception) {
                 onResult(Result.failure(e))
             }
@@ -922,31 +951,56 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                     return@launch
                 }
 
-                val downloadResult = WebDavHelper.downloadFile(
+                var restoredRules = false
+                var restoredWebDav = false
+
+                // 1. 下载恢复规则配置文件
+                val rulesFileName = if (settings.webdavPath.isNotBlank()) settings.webdavPath else "tts_rules_backup.json"
+                val downloadRulesResult = WebDavHelper.downloadFile(
                     url = settings.webdavUrl,
                     username = settings.webdavUsername,
                     password = settings.webdavPassword,
                     dirName = settings.webdavDir,
-                    fileName = settings.webdavPath
+                    fileName = rulesFileName
                 )
-
-                if (downloadResult.isSuccess) {
-                    val content = downloadResult.getOrThrow()
+                if (downloadRulesResult.isSuccess) {
+                    val content = downloadRulesResult.getOrThrow()
                     val pkg = BackupPackage.fromJsonString(content)
-                    if (pkg == null) {
-                        onResult(Result.failure(Exception("备份文件格式解析错误")))
-                        return@launch
+                    if (pkg != null) {
+                        restoredRules = importBackupPackage(pkg)
                     }
+                }
 
-                    val success = importBackupPackage(pkg)
-                    if (success) {
-                        _toastEvent.emit("云端恢复成功")
-                        onResult(Result.success(Unit))
-                    } else {
-                        onResult(Result.failure(Exception("导入备份数据失败")))
+                // 2. 下载恢复 WebDAV 配置文件
+                val currentSettings = appDao.getSettings() ?: SettingsEntity()
+                val downloadWebDavResult = WebDavHelper.downloadFile(
+                    url = currentSettings.webdavUrl,
+                    username = currentSettings.webdavUsername,
+                    password = currentSettings.webdavPassword,
+                    dirName = currentSettings.webdavDir,
+                    fileName = "webdav_config.json"
+                )
+                if (downloadWebDavResult.isSuccess) {
+                    val content = downloadWebDavResult.getOrThrow()
+                    val pkg = WebDavConfigPackage.fromJsonString(content)
+                    if (pkg != null) {
+                        val updated = currentSettings.copy(
+                            webdavUrl = pkg.webdavUrl,
+                            webdavUsername = pkg.webdavUsername,
+                            webdavPassword = pkg.webdavPassword,
+                            webdavDir = pkg.webdavDir,
+                            webdavPath = pkg.webdavPath
+                        )
+                        appDao.saveSettings(updated)
+                        restoredWebDav = true
                     }
+                }
+
+                if (restoredRules || restoredWebDav) {
+                    _toastEvent.emit("云端恢复成功")
+                    onResult(Result.success(Unit))
                 } else {
-                    onResult(Result.failure(downloadResult.exceptionOrNull() ?: Exception("下载备份失败")))
+                    onResult(Result.failure(Exception("下载或解析云端备份失败")))
                 }
             } catch (e: Exception) {
                 onResult(Result.failure(e))
@@ -959,9 +1013,21 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
             try {
                 val settings = appDao.getSettings() ?: SettingsEntity()
                 val rulesStr = exportRulesToJsonString()
-                val settingsStr = settings.toJsonString()
-                val pkg = BackupPackage(version = 1, rulesJson = rulesStr, settingsJson = settingsStr)
-                pkg.toJsonString()
+                val rulesPkg = BackupPackage(version = 1, rulesJson = rulesStr)
+                val webdavPkg = WebDavConfigPackage(
+                    version = 1,
+                    webdavUrl = settings.webdavUrl,
+                    webdavUsername = settings.webdavUsername,
+                    webdavPassword = settings.webdavPassword,
+                    webdavDir = settings.webdavDir,
+                    webdavPath = settings.webdavPath
+                )
+                val combined = CombinedBackupPackage(
+                    version = 1,
+                    rulesPackage = rulesPkg,
+                    webdavPackage = webdavPkg
+                )
+                combined.toJsonString()
             } catch (e: Exception) {
                 ""
             }
@@ -971,18 +1037,64 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
     fun restoreFromLocalString(jsonStr: String, onResult: (Result<Unit>) -> Unit) {
         viewModelScope.launch {
             try {
-                val pkg = BackupPackage.fromJsonString(jsonStr)
-                if (pkg == null) {
-                    onResult(Result.failure(Exception("备份文件格式解析错误")))
+                var restored = false
+
+                // 1. 优先尝试作为 CombinedBackupPackage 完整合并恢复
+                val combinedPkg = CombinedBackupPackage.fromJsonString(jsonStr)
+                if (combinedPkg != null) {
+                    if (combinedPkg.rulesPackage != null) {
+                        restored = importBackupPackage(combinedPkg.rulesPackage) || restored
+                    }
+                    if (combinedPkg.webdavPackage != null) {
+                        val currentSettings = appDao.getSettings() ?: SettingsEntity()
+                        val updated = currentSettings.copy(
+                            webdavUrl = combinedPkg.webdavPackage.webdavUrl,
+                            webdavUsername = combinedPkg.webdavPackage.webdavUsername,
+                            webdavPassword = combinedPkg.webdavPackage.webdavPassword,
+                            webdavDir = combinedPkg.webdavPackage.webdavDir,
+                            webdavPath = combinedPkg.webdavPackage.webdavPath
+                        )
+                        appDao.saveSettings(updated)
+                        restored = true
+                    }
+                    if (restored) {
+                        _toastEvent.emit("完整备份恢复成功")
+                        onResult(Result.success(Unit))
+                        return@launch
+                    }
+                }
+
+                // 2. 尝试作为单独的规则配置文件恢复
+                val rulesPkg = BackupPackage.fromJsonString(jsonStr)
+                if (rulesPkg != null) {
+                    val success = importBackupPackage(rulesPkg)
+                    if (success) {
+                        _toastEvent.emit("规则配置恢复成功")
+                        onResult(Result.success(Unit))
+                    } else {
+                        onResult(Result.failure(Exception("导入规则备份数据失败")))
+                    }
                     return@launch
                 }
-                val success = importBackupPackage(pkg)
-                if (success) {
-                    _toastEvent.emit("本地恢复成功")
+
+                // 3. 尝试作为单独的 WebDAV 配置文件恢复
+                val webdavPkg = WebDavConfigPackage.fromJsonString(jsonStr)
+                if (webdavPkg != null) {
+                    val settings = appDao.getSettings() ?: SettingsEntity()
+                    val updated = settings.copy(
+                        webdavUrl = webdavPkg.webdavUrl,
+                        webdavUsername = webdavPkg.webdavUsername,
+                        webdavPassword = webdavPkg.webdavPassword,
+                        webdavDir = webdavPkg.webdavDir,
+                        webdavPath = webdavPkg.webdavPath
+                    )
+                    appDao.saveSettings(updated)
+                    _toastEvent.emit("WebDAV 配置恢复成功")
                     onResult(Result.success(Unit))
-                } else {
-                    onResult(Result.failure(Exception("导入备份数据失败")))
+                    return@launch
                 }
+
+                onResult(Result.failure(Exception("配置文件格式无法解析")))
             } catch (e: Exception) {
                 onResult(Result.failure(e))
             }
@@ -992,17 +1104,8 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
     private suspend fun importBackupPackage(backup: BackupPackage): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                // 1. Restore settings if available
-                backup.settingsJson?.let { sJson ->
-                    val newSettings = com.example.data.parseSettingsFromJson(sJson)
-                    if (newSettings != null) {
-                        appDao.saveSettings(newSettings.copy(id = 1))
-                    }
-                }
-
-                // 2. Clear and restore rules
                 val rulesStr = backup.rulesJson
-                if (rulesStr.isNotBlank()) {
+                if (rulesStr.isNotBlank() && rulesStr != "[]") {
                     val jsonArray = org.json.JSONArray(rulesStr)
                     appDao.clearAllRules()
                     appDao.clearAllRuleGroups()

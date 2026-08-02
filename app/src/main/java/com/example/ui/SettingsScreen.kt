@@ -396,9 +396,9 @@ fun SettingsScreen(
                         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                             outputStream.write(jsonContent.toByteArray(Charsets.UTF_8))
                         }
-                        Toast.makeText(context, "备份成功", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "备份文件导出成功", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
-                        Toast.makeText(context, "备份失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "导出失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -493,7 +493,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "WebDAV",
+                        text = "WebDAV 云端同步",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -509,8 +509,8 @@ fun SettingsScreen(
                             contentDescription = "WebDAV 配置",
                             modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("WebDAV 配置", style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("WebDAV 设置", style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
