@@ -23,7 +23,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -31,6 +33,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +71,7 @@ fun LogsScreen(
     val listState = rememberLazyListState()
 
     var selectedLogForDetail by remember { mutableStateOf<HistoryEntity?>(null) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(history) {
         if (history.isNotEmpty()) {
@@ -94,30 +99,6 @@ fun LogsScreen(
             )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 复制按钮
-                IconButton(
-                    onClick = { viewModel.copyLogsToClipboard(context) },
-                    modifier = Modifier.testTag("copy_error_logs_button")
-                ) {
-                    Icon(
-                        Icons.Default.ContentCopy,
-                        contentDescription = "复制错误日志",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                // 导出/分享按钮
-                IconButton(
-                    onClick = { viewModel.shareLogReport(context) },
-                    modifier = Modifier.testTag("export_error_logs_button")
-                ) {
-                    Icon(
-                        Icons.Default.Share,
-                        contentDescription = "导出错误日志",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
                 if (history.isNotEmpty()) {
                     IconButton(
                         onClick = { viewModel.clearHistory() },
@@ -127,6 +108,56 @@ fun LogsScreen(
                             Icons.Default.Delete,
                             contentDescription = "清空所有记录",
                             tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                // 收纳按钮 (下拉菜单: 复制日志, 导出日志)
+                Box {
+                    IconButton(
+                        onClick = { showOverflowMenu = true },
+                        modifier = Modifier.testTag("overflow_menu_button")
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "更多选项",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showOverflowMenu,
+                        onDismissRequest = { showOverflowMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("复制错误日志") },
+                            onClick = {
+                                showOverflowMenu = false
+                                viewModel.copyLogsToClipboard(context)
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            modifier = Modifier.testTag("copy_error_logs_menu_item")
+                        )
+                        DropdownMenuItem(
+                            text = { Text("导出错误日志") },
+                            onClick = {
+                                showOverflowMenu = false
+                                viewModel.shareLogReport(context)
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Share,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            modifier = Modifier.testTag("export_error_logs_menu_item")
                         )
                     }
                 }
@@ -204,9 +235,7 @@ fun LogsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                if (!isSuccess || !log.errorMsg.isNullOrEmpty()) {
-                                    selectedLogForDetail = log
-                                }
+                                selectedLogForDetail = log
                             },
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
@@ -260,6 +289,19 @@ fun LogsScreen(
                                 fontFamily = FontFamily.SansSerif,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+
+                            val hits = remember(log.hitsJson) { log.parseHits() }
+                            if (hits.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                hits.forEach { hit ->
+                                    Text(
+                                        text = "命中规则: ${hit.ruleTarget} → ${hit.replacement}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(8.dp))
 
@@ -333,7 +375,11 @@ fun LogsScreen(
                 onDismissRequest = { selectedLogForDetail = null },
                 title = {
                     Text(
-                        text = if (log.status == "CRASH") "崩溃闪退堆栈详情" else "请求失败明细",
+                        text = when (log.status) {
+                            "CRASH" -> "崩溃闪退堆栈详情"
+                            "SUCCESS" -> "请求日志详情"
+                            else -> "请求失败明细"
+                        },
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -347,24 +393,39 @@ fun LogsScreen(
                         Text("引擎: ${log.enginePackage}", style = MaterialTheme.typography.bodySmall)
                         Text("请求文本: ${log.text}", style = MaterialTheme.typography.bodySmall)
 
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text("异常堆栈明细:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    RoundedCornerShape(8.dp)
+                        val detailHits = remember(log.hitsJson) { log.parseHits() }
+                        if (detailHits.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            detailHits.forEach { hit ->
+                                Text(
+                                    text = "命中规则: ${hit.ruleTarget} → ${hit.replacement}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.Medium
                                 )
-                                .padding(10.dp)
-                        ) {
-                            Text(
-                                text = log.errorMsg ?: "未知异常",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            }
+                        }
+
+                        if (!log.errorMsg.isNullOrEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("异常堆栈明细:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(10.dp)
+                            ) {
+                                Text(
+                                    text = log.errorMsg,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 },

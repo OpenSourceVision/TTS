@@ -3,11 +3,11 @@ package com.example.data
 import java.util.concurrent.ConcurrentHashMap
 
 object RuleCache {
-    private val cache = ConcurrentHashMap<String, String>()
+    private val cache = ConcurrentHashMap<String, RuleProcessResult>()
 
-    fun get(key: String): String? = cache[key]
+    fun get(key: String): RuleProcessResult? = cache[key]
 
-    fun put(key: String, value: String) {
+    fun put(key: String, value: RuleProcessResult) {
         if (cache.size > 1000) {
             cache.clear() // Prevent memory issues
         }

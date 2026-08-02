@@ -198,7 +198,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
             }
             
             // Apply polyphone rules on the test text with cache!
-            val processedText = TextRuleProcessor.process(text, appDao, context)
+            val processedText = TextRuleProcessor.process(text, appDao, context).processedText
 
             testTts = TextToSpeech(context, { status ->
                 if (status == TextToSpeech.SUCCESS) {
@@ -308,6 +308,12 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                 sb.append("[$index] 时间: $logTime | 状态: ${log.status} | 耗时: ${log.durationMs}ms | 字数: ${log.length}\n")
                 sb.append("    引擎包名: ${log.enginePackage}\n")
                 sb.append("    请求文本: ${log.text}\n")
+                val hits = log.parseHits()
+                if (hits.isNotEmpty()) {
+                    hits.forEach { hit ->
+                        sb.append("    命中规则: ${hit.ruleTarget} → ${hit.replacement}\n")
+                    }
+                }
                 if (!log.errorMsg.isNullOrBlank()) {
                     sb.append("    异常/错误明细: ${log.errorMsg}\n")
                 }

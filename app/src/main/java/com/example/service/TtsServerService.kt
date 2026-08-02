@@ -16,8 +16,10 @@ import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.data.AppDatabase
 import com.example.data.HistoryEntity
+import com.example.data.RuleProcessResult
 import com.example.data.SettingsEntity
 import com.example.data.TextRuleProcessor
+import com.example.data.toHitsJsonString
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -284,7 +286,9 @@ class TtsServerService : Service() {
 
                 val db = AppDatabase.getDatabase(applicationContext)
                 val originalText = text
-                text = processTextRules(originalText, db)
+                val ruleResult = processTextRules(originalText, db)
+                text = ruleResult.processedText
+                val hitsJson = ruleResult.hits.toHitsJsonString()
 
                 val settings = db.appDao().getSettings() ?: SettingsEntity()
 
@@ -310,7 +314,7 @@ class TtsServerService : Service() {
                 if (audioFile == null || !audioFile.exists()) {
                     val duration = System.currentTimeMillis() - startTime
                     val errorMsg = errorDetails ?: "Synthesis failed for text: $text"
-                    logToDatabase(originalText, enginePackage, "FAILED", duration, errorMsg)
+                    logToDatabase(originalText, enginePackage, "FAILED", duration, errorMsg, hitsJson)
                     call.respondText("Error: Failed to synthesize audio. ($errorMsg)", status = HttpStatusCode.InternalServerError)
                     return@withPermit
                 }
@@ -329,18 +333,18 @@ class TtsServerService : Service() {
                                 }
                             }
                             val duration = System.currentTimeMillis() - startTime
-                            logToDatabase(originalText, enginePackage, "SUCCESS", duration)
+                            logToDatabase(originalText, enginePackage, "SUCCESS", duration, null, hitsJson)
                         } catch (e: Throwable) {
                             // 客户端断开连接
                             val duration = System.currentTimeMillis() - startTime
-                            logToDatabase(originalText, enginePackage, "CANCELLED", duration, e.message)
+                            logToDatabase(originalText, enginePackage, "CANCELLED", duration, e.message, hitsJson)
                         } finally {
                             try { audioFile.delete() } catch (e: Throwable) {}
                         }
                     }
                 } catch (e: Throwable) {
                     val duration = System.currentTimeMillis() - startTime
-                    logToDatabase(originalText, enginePackage, "FAILED", duration, e.message)
+                    logToDatabase(originalText, enginePackage, "FAILED", duration, e.message, hitsJson)
                 }
             }
         } catch (e: Throwable) {
@@ -348,7 +352,7 @@ class TtsServerService : Service() {
             val stackTrace = android.util.Log.getStackTraceString(e)
             val errorMsg = "CRASH IN REQUEST: ${e.javaClass.name}: ${e.message}\n$stackTrace"
             e.printStackTrace()
-            logToDatabase(text.ifEmpty { "Legado Request" }, enginePackage.ifEmpty { "System" }, "CRASH", duration, errorMsg)
+            logToDatabase(text.ifEmpty { "Legado Request" }, enginePackage.ifEmpty { "System" }, "CRASH", duration, errorMsg, null)
             try {
                 call.respondText("Error: Internal server processing exception (${e.message})", status = HttpStatusCode.InternalServerError)
             } catch (ex: Throwable) {}
@@ -677,7 +681,8 @@ class TtsServerService : Service() {
         engine: String,
         status: String,
         durationMs: Long,
-        errorMsg: String? = null
+        errorMsg: String? = null,
+        hitsJson: String? = null
     ) {
         val database = AppDatabase.getDatabase(applicationContext)
         val history = HistoryEntity(
@@ -687,7 +692,8 @@ class TtsServerService : Service() {
             timestamp = System.currentTimeMillis(),
             status = status,
             durationMs = durationMs,
-            errorMsg = errorMsg
+            errorMsg = errorMsg,
+            hitsJson = hitsJson
         )
         database.appDao().insertHistory(history)
     }
@@ -729,7 +735,7 @@ class TtsServerService : Service() {
             .build()
     }
 
-    private suspend fun processTextRules(originalText: String, db: AppDatabase): String {
+    private suspend fun processTextRules(originalText: String, db: AppDatabase): RuleProcessResult {
         return TextRuleProcessor.process(originalText, db.appDao(), applicationContext)
     }
 }

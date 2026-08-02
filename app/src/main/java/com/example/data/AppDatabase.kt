@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [SettingsEntity::class, HistoryEntity::class, RuleGroupEntity::class, RuleEntity::class, PolyphoneCacheRow::class, PresetPolyphoneEntity::class], version = 11, exportSchema = false)
+@Database(entities = [SettingsEntity::class, HistoryEntity::class, RuleGroupEntity::class, RuleEntity::class, PolyphoneCacheRow::class, PresetPolyphoneEntity::class], version = 12, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun appDao(): AppDao
 
@@ -87,6 +87,16 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 ensureModelManagementFields(db)
+            }
+        }
+
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (hasTable(db, "history")) {
+                    if (!hasColumn(db, "history", "hitsJson")) {
+                        db.execSQL("ALTER TABLE `history` ADD COLUMN `hitsJson` TEXT DEFAULT NULL")
+                    }
+                }
             }
         }
 
@@ -215,7 +225,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tts_forwarder_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
