@@ -493,24 +493,21 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "WebDAV 云端同步",
+                        text = "WebDAV",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    TextButton(
+                    IconButton(
                         onClick = { showWebdavConfigDialog = true },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
-                        modifier = Modifier.height(32.dp).testTag("webdav_config_trigger"),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        modifier = Modifier.size(32.dp).testTag("webdav_config_trigger")
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,
                             contentDescription = "WebDAV 配置",
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("WebDAV 设置", style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
