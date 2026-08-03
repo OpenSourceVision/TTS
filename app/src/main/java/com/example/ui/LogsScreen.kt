@@ -130,7 +130,7 @@ fun LogsScreen(
                         onDismissRequest = { showOverflowMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("复制错误日志") },
+                            text = { Text("复制日志") },
                             onClick = {
                                 showOverflowMenu = false
                                 viewModel.copyLogsToClipboard(context)
@@ -142,10 +142,10 @@ fun LogsScreen(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             },
-                            modifier = Modifier.testTag("copy_error_logs_menu_item")
+                            modifier = Modifier.testTag("copy_logs_menu_item")
                         )
                         DropdownMenuItem(
-                            text = { Text("导出错误日志") },
+                            text = { Text("导出日志") },
                             onClick = {
                                 showOverflowMenu = false
                                 viewModel.shareLogReport(context)
@@ -157,7 +157,7 @@ fun LogsScreen(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             },
-                            modifier = Modifier.testTag("export_error_logs_menu_item")
+                            modifier = Modifier.testTag("export_logs_menu_item")
                         )
                     }
                 }
@@ -370,6 +370,7 @@ fun LogsScreen(
         selectedLogForDetail?.let { log ->
             val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
             val formattedTime = timeFormat.format(Date(log.timestamp))
+            val hasError = !log.errorMsg.isNullOrBlank() || log.status == "CRASH"
 
             AlertDialog(
                 onDismissRequest = { selectedLogForDetail = null },
@@ -432,16 +433,28 @@ fun LogsScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            val detailText = "时间: $formattedTime\n引擎: ${log.enginePackage}\n文本: ${log.text}\n异常明细:\n${log.errorMsg}"
+                            val detailText = buildString {
+                                append("时间: $formattedTime\n")
+                                append("引擎: ${log.enginePackage}\n")
+                                append("文本: ${log.text}")
+                                val detailHits = log.parseHits()
+                                if (detailHits.isNotEmpty()) {
+                                    append("\n命中规则: ")
+                                    append(detailHits.joinToString { "${it.ruleTarget} → ${it.replacement}" })
+                                }
+                                if (!log.errorMsg.isNullOrBlank()) {
+                                    append("\n异常明细:\n${log.errorMsg}")
+                                }
+                            }
                             val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                             val clip = android.content.ClipData.newPlainText("Log Detail", detailText)
                             clipboard.setPrimaryClip(clip)
-                            android.widget.Toast.makeText(context, "已复制异常堆栈", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     ) {
                         Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("复制此异常")
+                        Text("复制")
                     }
                 },
                 dismissButton = {

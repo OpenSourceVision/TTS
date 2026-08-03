@@ -1,6 +1,7 @@
 package com.example.viewmodel
 
 import java.io.File
+import android.os.Environment
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -125,20 +126,44 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                 appDao.saveSettings(SettingsEntity())
             }
             
-            // Populate default rules if there are no rule groups or if database has old literals
+            // Populate default or restored rules if there are no rule groups at all
             val existingGroups = appDao.getAllRuleGroups()
-            val allRules = appDao.getAllRules()
-            val hasOldRules = allRules.any { it.target in listOf("重要", "重心", "一重", "二重", "三重") }
-            if (existingGroups.isEmpty() || hasOldRules) {
-                setupDefaultReferenceRules()
+            if (existingGroups.isEmpty()) {
+                // 1. Try auto-restoring from local persistent auto-backup file (e.g. from Download directory)
+                val restoredLocally = tryRestoreFromLocalAutoBackup()
+                if (!restoredLocally) {
+                    // 2. Try auto-restoring from WebDAV if configured
+                    val settings = appDao.getSettings()
+                    var restoredWebDav = false
+                    if (settings != null && settings.webdavUrl.isNotBlank()) {
+                        val rulesFileName = if (settings.webdavPath.isNotBlank()) settings.webdavPath else "tts_rules_backup.json"
+                        val downloadRulesResult = WebDavHelper.downloadFile(
+                            url = settings.webdavUrl,
+                            username = settings.webdavUsername,
+                            password = settings.webdavPassword,
+                            dirName = settings.webdavDir,
+                            fileName = rulesFileName
+                        )
+                        if (downloadRulesResult.isSuccess) {
+                            val content = downloadRulesResult.getOrThrow()
+                            val pkg = BackupPackage.fromJsonString(content)
+                            if (pkg != null) {
+                                restoredWebDav = importBackupPackageInternal(pkg)
+                            }
+                        }
+                    }
+                    if (!restoredWebDav) {
+                        setupDefaultReferenceRules()
+                    }
+                }
+            } else {
+                // Ensure persistent local auto-backup file is up to date
+                saveAutoBackupToExternalStorage()
             }
         }
     }
 
     private suspend fun setupDefaultReferenceRules() {
-        appDao.clearAllRuleGroups()
-        appDao.clearAllRules()
-        
         // 1. Group: "重" -> "众"
         val group1Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "众"))
         appDao.insertRule(
@@ -292,7 +317,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val timeStr = dateFormat.format(Date())
 
-        sb.append("=================== TTS 服务错误与运行诊断日志 ===================\n")
+        sb.append("=================== TTS 服务运行与诊断日志 ===================\n")
         sb.append("导出时间: ").append(timeStr).append("\n")
         sb.append("设备品牌: ").append(android.os.Build.MANUFACTURER).append(" ").append(android.os.Build.MODEL).append("\n")
         sb.append("系统版本: Android ").append(android.os.Build.VERSION.RELEASE).append(" (API ").append(android.os.Build.VERSION.SDK_INT).append(")\n")
@@ -300,7 +325,12 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
 
         sb.append("------------------- 1. App 未捕获崩溃/闪退堆栈记录 -------------------\n")
         val crashLogs = com.example.util.CrashHandler.readCrashLogs(context)
-        sb.append(crashLogs).append("\n\n")
+        if (crashLogs.isBlank()) {
+            sb.append("暂无崩溃记录\n")
+        } else {
+            sb.append(crashLogs)
+        }
+        sb.append("\n\n")
 
         sb.append("------------------- 2. TTS 请求与合成历史/异常记录 -------------------\n")
         val logs = historyState.value
@@ -309,7 +339,14 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         } else {
             logs.forEachIndexed { index, log ->
                 val logTime = dateFormat.format(Date(log.timestamp))
-                sb.append("[$index] 时间: $logTime | 状态: ${log.status} | 耗时: ${log.durationMs}ms | 字数: ${log.length}\n")
+                val statusText = when (log.status) {
+                    "CRASH" -> "APP崩溃/闪退"
+                    "SUCCESS" -> "转发成功"
+                    "PARTIAL_SUCCESS" -> "部分句子成功"
+                    "SENTENCE_FAILED" -> "单句失败跳过"
+                    else -> "转发失败"
+                }
+                sb.append("[$index] 时间: $logTime | 状态: $statusText (${log.status}) | 耗时: ${log.durationMs}ms | 字数: ${log.length}\n")
                 sb.append("    引擎包名: ${log.enginePackage}\n")
                 sb.append("    请求文本: ${log.text}\n")
                 val hits = log.parseHits()
@@ -334,9 +371,9 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
             try {
                 val report = generateLogReport()
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("TTS Error Logs", report)
+                val clip = ClipData.newPlainText("TTS Logs", report)
                 clipboard.setPrimaryClip(clip)
-                _toastEvent.emit("错误诊断日志已复制到剪切板")
+                _toastEvent.emit("运行诊断日志已复制到剪切板")
             } catch (e: Exception) {
                 _toastEvent.emit("复制失败: ${e.message}")
             }
@@ -347,7 +384,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val report = generateLogReport()
-                val file = File(context.cacheDir, "tts_error_log.txt")
+                val file = File(context.cacheDir, "tts_log_report.txt")
                 file.writeText(report)
 
                 val uri = androidx.core.content.FileProvider.getUriForFile(
@@ -359,18 +396,17 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "TTS服务错误诊断日志")
+                    putExtra(Intent.EXTRA_SUBJECT, "TTS服务运行与诊断日志")
                     putExtra(Intent.EXTRA_TEXT, report)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
 
-                val chooser = Intent.createChooser(intent, "导出/分享错误日志")
+                val chooser = Intent.createChooser(intent, "导出/分享日志")
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(chooser)
             } catch (e: Exception) {
-                e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    copyLogsToClipboard(context)
+                    _toastEvent.emit("导出日志失败: ${e.message}")
                 }
             }
         }
@@ -509,6 +545,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
             }
             appDao.insertRuleGroup(RuleGroupEntity(name = name, replacement = replacement))
             RuleCache.clear()
+            saveAutoBackupToExternalStorage()
             _toastEvent.emit("新增分组 '$name' 成功")
         }
     }
@@ -532,6 +569,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                 }
                 
                 RuleCache.clear()
+                saveAutoBackupToExternalStorage()
                 _toastEvent.emit("修改分组成功")
             }
         }
@@ -542,6 +580,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
             appDao.deleteRuleGroupById(groupId)
             appDao.deleteRulesByGroupId(groupId)
             RuleCache.clear()
+            saveAutoBackupToExternalStorage()
             _toastEvent.emit("已删除该分组及其全部规则")
         }
     }
@@ -562,6 +601,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                 )
             )
             RuleCache.clear()
+            saveAutoBackupToExternalStorage()
             _toastEvent.emit("新增规则成功")
         }
     }
@@ -582,6 +622,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                     )
                 )
                 RuleCache.clear()
+                saveAutoBackupToExternalStorage()
                 _toastEvent.emit("修改规则成功")
             }
         }
@@ -591,6 +632,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         viewModelScope.launch {
             appDao.deleteRuleById(ruleId)
             RuleCache.clear()
+            saveAutoBackupToExternalStorage()
             _toastEvent.emit("删除规则成功")
         }
     }
@@ -600,6 +642,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
             appDao.clearAllRuleGroups()
             appDao.clearAllRules()
             RuleCache.clear()
+            saveAutoBackupToExternalStorage()
             _toastEvent.emit("所有发音与替换规则已清空")
         }
     }
@@ -608,6 +651,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         viewModelScope.launch {
             appDao.insertRule(rule.copy(isEnabled = !rule.isEnabled))
             RuleCache.clear()
+            saveAutoBackupToExternalStorage()
             _toastEvent.emit("规则状态已更新")
         }
     }
@@ -865,6 +909,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                     }
                 }
                 RuleCache.clear()
+                saveAutoBackupToExternalStorage()
                 withContext(Dispatchers.Main) {
                     onComplete(true)
                 }
@@ -1101,7 +1146,79 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         }
     }
 
-    private suspend fun importBackupPackage(backup: BackupPackage): Boolean {
+    private suspend fun saveAutoBackupToExternalStorage() {
+        withContext(Dispatchers.IO) {
+            try {
+                val jsonStr = exportRulesToJsonString()
+                if (jsonStr.isBlank() || jsonStr == "[]") return@withContext
+                val pkgStr = BackupPackage(version = 1, rulesJson = jsonStr).toJsonString()
+
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (downloadsDir != null) {
+                    if (!downloadsDir.exists()) downloadsDir.mkdirs()
+                    File(downloadsDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                }
+
+                val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+                if (docsDir != null) {
+                    if (!docsDir.exists()) docsDir.mkdirs()
+                    File(docsDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                }
+
+                val extFilesDir = context.getExternalFilesDir(null)
+                if (extFilesDir != null) {
+                    File(extFilesDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private suspend fun tryRestoreFromLocalAutoBackup(): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val candidateFiles = mutableListOf<File>()
+
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (downloadsDir != null) {
+                    candidateFiles.add(File(downloadsDir, "tts_rules_auto_backup.json"))
+                    candidateFiles.add(File(downloadsDir, "tts_rules_backup.json"))
+                    candidateFiles.add(File(downloadsDir, "TTS_Rules_Backup.json"))
+                    candidateFiles.add(File(downloadsDir, "TTS_Forwarder_Backup.json"))
+                }
+                val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+                if (docsDir != null) {
+                    candidateFiles.add(File(docsDir, "tts_rules_auto_backup.json"))
+                    candidateFiles.add(File(docsDir, "tts_rules_backup.json"))
+                    candidateFiles.add(File(docsDir, "TTS_Rules_Backup.json"))
+                    candidateFiles.add(File(docsDir, "TTS_Forwarder_Backup.json"))
+                }
+                val extFilesDir = context.getExternalFilesDir(null)
+                if (extFilesDir != null) {
+                    candidateFiles.add(File(extFilesDir, "tts_rules_auto_backup.json"))
+                    candidateFiles.add(File(extFilesDir, "tts_rules_backup.json"))
+                }
+
+                for (file in candidateFiles) {
+                    if (file.exists() && file.length() > 0) {
+                        val content = file.readText(Charsets.UTF_8)
+                        val pkg = BackupPackage.fromJsonString(content)
+                        if (pkg != null && pkg.rulesJson.isNotBlank() && pkg.rulesJson != "[]") {
+                            val restored = importBackupPackageInternal(pkg)
+                            if (restored) return@withContext true
+                        }
+                    }
+                }
+                false
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
+            }
+        }
+    }
+
+    private suspend fun importBackupPackageInternal(backup: BackupPackage): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val rulesStr = backup.rulesJson
@@ -1146,6 +1263,14 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                 false
             }
         }
+    }
+
+    private suspend fun importBackupPackage(backup: BackupPackage): Boolean {
+        val result = importBackupPackageInternal(backup)
+        if (result) {
+            saveAutoBackupToExternalStorage()
+        }
+        return result
     }
 
     override fun onCleared() {
