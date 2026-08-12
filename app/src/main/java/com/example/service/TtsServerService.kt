@@ -70,6 +70,7 @@ class TtsServerService : Service() {
     private var activeEnginePackage: String? = null
     private val consecutiveFailureCount = java.util.concurrent.atomic.AtomicInteger(0)
     private val synthesisMutex = Mutex()
+    private val pendingUtterances = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     // 保留并发限制信号量
     private val requestSemaphore = Semaphore(4)
     private var settingsJob: Job? = null
@@ -307,9 +308,12 @@ class TtsServerService : Service() {
                     return@withPermit
                 }
 
-                val (audioFile, errorDetails) = synthesisMutex.withLock {
-                    synthesizeText(text, rate, pitch, enginePackage)
+                val resultPair = withTimeoutOrNull(30000) {
+                    synthesisMutex.withLock {
+                        synthesizeText(text, rate, pitch, enginePackage)
+                    }
                 }
+                val (audioFile, errorDetails) = resultPair ?: Pair(null, "Server synthesis queue timeout (30s)")
 
                 if (audioFile == null || !audioFile.exists()) {
                     val duration = System.currentTimeMillis() - startTime
@@ -381,6 +385,29 @@ class TtsServerService : Service() {
         return calculated.coerceIn(0.1f, 2.0f)
     }
 
+    private fun setupTtsListener(tts: TextToSpeech) {
+        try {
+            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(id: String) {}
+
+                override fun onDone(id: String) {
+                    pendingUtterances.remove(id)?.complete(true)
+                }
+
+                override fun onError(id: String) {
+                    pendingUtterances.remove(id)?.complete(false)
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(id: String, errorCode: Int) {
+                    pendingUtterances.remove(id)?.complete(false)
+                }
+            })
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
     private suspend fun handleSynthesizeFailure(
         tempFile: File?,
         errorMsg: String
@@ -394,8 +421,9 @@ class TtsServerService : Service() {
         val failures = consecutiveFailureCount.incrementAndGet()
         var finalErrorMsg = errorMsg
 
-        // 3. 当连续失败达到 3 次时，在 Main 线程主动 shutdown 并清空引擎实例（供下次重新创建）
+        // 3. 当连续失败达到 3 次时，在 Main 线程主动 shutdown 并清空引擎实例
         if (failures >= 3) {
+            val currentPkg = activeEnginePackage ?: ""
             withContext(Dispatchers.Main) {
                 try {
                     activeTts?.shutdown()
@@ -404,6 +432,15 @@ class TtsServerService : Service() {
                 }
                 activeTts = null
                 activeEnginePackage = null
+
+                // 立即尝试重新构建 TTS 实例，避免后续排队请求遇到 null 而触发连续跳段
+                if (currentPkg.isNotBlank()) {
+                    try {
+                        getTtsInstance(currentPkg)
+                    } catch (e: Throwable) {
+                        e.printStackTrace()
+                    }
+                }
             }
             consecutiveFailureCount.set(0)
             finalErrorMsg += " [检测到引擎连续 3 次合成失败，已自动重置并重新构建 TTS 引擎实例]"
@@ -419,6 +456,27 @@ class TtsServerService : Service() {
         pitch: Float,
         enginePackage: String
     ): Pair<File?, String?> {
+        var lastError: String? = null
+        for (attempt in 1..2) {
+            val (file, err) = performSingleSynthesis(text, rate, pitch, enginePackage)
+            if (file != null && file.exists() && file.length() > 0) {
+                consecutiveFailureCount.set(0)
+                return Pair(file, null)
+            }
+            lastError = err
+            if (attempt == 1) {
+                kotlinx.coroutines.delay(200)
+            }
+        }
+        return handleSynthesizeFailure(null, lastError ?: "Synthesized audio file missing or empty after retry")
+    }
+
+    private suspend fun performSingleSynthesis(
+        text: String,
+        rate: Float,
+        pitch: Float,
+        enginePackage: String
+    ): Pair<File?, String?> {
         var errorDetails: String? = null
 
         val tts = try {
@@ -429,7 +487,7 @@ class TtsServerService : Service() {
         }
 
         if (tts == null) {
-            return handleSynthesizeFailure(null, errorDetails ?: "TTS engine initialization failed for package '$enginePackage'")
+            return Pair(null, errorDetails ?: "TTS engine initialization failed for package '$enginePackage'")
         }
 
         val utteranceId = "tts_" + System.currentTimeMillis() + "_" + (1000..9999).random()
@@ -440,9 +498,10 @@ class TtsServerService : Service() {
             }
         } catch (e: Throwable) {
             e.printStackTrace()
-            return handleSynthesizeFailure(null, "Temp file creation failed: ${e.javaClass.name}: ${e.message}")
+            return Pair(null, "Temp file creation failed: ${e.javaClass.name}: ${e.message}")
         }
         val deferredResult = CompletableDeferred<Boolean>()
+        pendingUtterances[utteranceId] = deferredResult
 
         val bundle = Bundle()
         try {
@@ -453,35 +512,10 @@ class TtsServerService : Service() {
 
         val synthResult = withContext(Dispatchers.Main) {
             try {
-                // 1. 设置进度监听器 (加 try-catch 保护)
-                try {
-                    tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                        override fun onStart(id: String) {}
+                // 保证该 TTS 实例绑定全局进度监听器
+                setupTtsListener(tts)
 
-                        override fun onDone(id: String) {
-                            if (id == utteranceId) {
-                                try { deferredResult.complete(true) } catch (e: Throwable) {}
-                            }
-                        }
-
-                        override fun onError(id: String) {
-                            if (id == utteranceId) {
-                                try { deferredResult.complete(false) } catch (e: Throwable) {}
-                            }
-                        }
-
-                        @Deprecated("Deprecated in Java")
-                        override fun onError(id: String, errorCode: Int) {
-                            if (id == utteranceId) {
-                                try { deferredResult.complete(false) } catch (e: Throwable) {}
-                            }
-                        }
-                    })
-                } catch (e: Throwable) {
-                    errorDetails = "setOnUtteranceProgressListener error: ${e.javaClass.name}: ${e.message}"
-                }
-
-                // 2. 设置语言 (加 try-catch 保护)
+                // 设置语言 (加 try-catch 保护)
                 try {
                     val hasChinese = text.any { it.code in 0x4E00..0x9FFF }
                     if (hasChinese) {
@@ -498,7 +532,7 @@ class TtsServerService : Service() {
                     }
                 }
 
-                // 3. 设置语速和音调 (加 try-catch 保护)
+                // 设置语速和音调 (加 try-catch 保护)
                 try {
                     tts.setSpeechRate(rate)
                 } catch (e: Throwable) {
@@ -515,7 +549,7 @@ class TtsServerService : Service() {
                     }
                 }
 
-                // 4. 合成音频文件 (加 try-catch 保护)
+                // 合成音频文件 (加 try-catch 保护)
                 tts.synthesizeToFile(text, bundle, tempFile, utteranceId)
             } catch (e: Throwable) {
                 errorDetails = "synthesizeToFile exception: ${e.javaClass.name}: ${e.message}"
@@ -524,12 +558,14 @@ class TtsServerService : Service() {
         }
 
         if (synthResult == TextToSpeech.ERROR) {
-            return handleSynthesizeFailure(tempFile, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
+            pendingUtterances.remove(utteranceId)
+            try { tempFile.delete() } catch (e: Throwable) {}
+            return Pair(null, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
         }
 
-        // 使用 withTimeoutOrNull (15秒) 进行单次合成超时保护
+        // 使用 withTimeoutOrNull (20秒) 进行单次合成超时保护
         val waitResult = try {
-            withTimeoutOrNull(15000) {
+            withTimeoutOrNull(20000) {
                 deferredResult.await()
             }
         } catch (e: Throwable) {
@@ -537,9 +573,13 @@ class TtsServerService : Service() {
                 errorDetails = "deferredResult await exception: ${e.javaClass.name}: ${e.message}"
             }
             null
+        } finally {
+            pendingUtterances.remove(utteranceId)
         }
 
-        if (waitResult == null) {
+        val fileHasData = tempFile.exists() && tempFile.length() > 0
+
+        if (waitResult == null && !fileHasData) {
             // 超时时在 Main 线程主动调用 tts.stop()，打断并清空 TTS 引擎内部任务队列
             withContext(Dispatchers.Main) {
                 try {
@@ -549,17 +589,15 @@ class TtsServerService : Service() {
                 }
             }
             if (errorDetails == null) {
-                errorDetails = "UtteranceListener timeout (15s), tts.stop() invoked"
+                errorDetails = "UtteranceListener timeout (20s), tts.stop() invoked"
             }
         }
 
-        val success = (waitResult == true) || (tempFile.exists() && tempFile.length() > 0)
-
-        return if (success && tempFile.exists() && tempFile.length() > 0) {
-            consecutiveFailureCount.set(0)
+        return if ((waitResult == true || fileHasData) && tempFile.exists() && tempFile.length() > 0) {
             Pair(tempFile, null)
         } else {
-            handleSynthesizeFailure(tempFile, errorDetails ?: "Synthesized audio file missing or empty (0 bytes)")
+            try { tempFile.delete() } catch (e: Throwable) {}
+            Pair(null, errorDetails ?: "Synthesized audio file missing or empty (0 bytes)")
         }
     }
 
@@ -631,6 +669,7 @@ class TtsServerService : Service() {
             }
 
             if (status == TextToSpeech.SUCCESS && tts != null) {
+                setupTtsListener(tts)
                 activeTts = tts
                 activeEnginePackage = if (isFallback) {
                     try { tts.defaultEngine ?: enginePackage } catch (e: Throwable) { enginePackage }
