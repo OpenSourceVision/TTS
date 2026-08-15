@@ -31,6 +31,8 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.request.contentLength
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receiveText
+import io.ktor.server.response.header
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
@@ -191,7 +193,9 @@ class TtsServerService : Service() {
 
             val server = embeddedServer(CIO, port = port) {
                 routing {
-                    // 【关键改动4】：同时支持 GET/POST 请求以及 /tts 与 /api/tts 两个路径
+                    // 【关键改动4】：同时支持 GET/POST 请求以及 /、/tts 与 /api/tts 路径
+                    get("/") { handleTtsRequest(call) }
+                    post("/") { handleTtsRequest(call) }
                     get("/tts") { handleTtsRequest(call) }
                     post("/tts") { handleTtsRequest(call) }
                     get("/api/tts") { handleTtsRequest(call) }
@@ -273,13 +277,16 @@ class TtsServerService : Service() {
                         } catch (e: Throwable) {
                             // Not valid JSON
                         }
-                    } else {
+                    } else if (trimmedBody.contains("=")) {
                         params.putAll(parseQueryParams(trimmedBody))
+                    } else {
+                        // 如果 POST Body 直接是纯文本（阅读 App 常用配置），直接作为朗读文本
+                        params["text"] = trimmedBody
                     }
                 }
 
                 // 字段别名完全保持一致
-                text = params["text"] ?: params["key"] ?: params["t"] ?: params["txt"] ?: ""
+                text = params["text"] ?: params["key"] ?: params["t"] ?: params["txt"] ?: params["speakText"] ?: ""
                 if (text.isEmpty()) {
                     call.respondText("Error: 'text' or 'key' parameter is required.", status = HttpStatusCode.BadRequest)
                     return@withPermit
@@ -304,7 +311,10 @@ class TtsServerService : Service() {
                 enginePackage = params["engine"] ?: params["e"] ?: settings.targetEnginePackage
 
                 if (text.isBlank()) {
-                    call.respondText("Error: Empty text after rule processing.", status = HttpStatusCode.BadRequest)
+                    val duration = System.currentTimeMillis() - startTime
+                    logToDatabase(originalText, enginePackage, "SUCCESS", duration, "Empty text after rule processing (returned silence audio)", hitsJson)
+                    val silenceWav = getSilenceWav()
+                    call.respondBytes(silenceWav, ContentType("audio", "wav"))
                     return@withPermit
                 }
 
@@ -324,31 +334,30 @@ class TtsServerService : Service() {
                 }
 
                 try {
-                    call.respondBytesWriter(contentType = ContentType("audio", "wav")) {
-                        try {
-                            FileInputStream(audioFile).use { input ->
-                                val buffer = ByteArray(8192)
-                                var bytesRead: Int
-                                while (input.read(buffer).also { bytesRead = it } != -1) {
-                                    if (bytesRead > 0) {
-                                        writeFully(buffer, 0, bytesRead)
-                                        flush()
-                                    }
-                                }
-                            }
-                            val duration = System.currentTimeMillis() - startTime
-                            logToDatabase(originalText, enginePackage, "SUCCESS", duration, null, hitsJson)
-                        } catch (e: Throwable) {
-                            // 客户端断开连接
-                            val duration = System.currentTimeMillis() - startTime
-                            logToDatabase(originalText, enginePackage, "CANCELLED", duration, e.message, hitsJson)
-                        } finally {
-                            try { audioFile.delete() } catch (e: Throwable) {}
-                        }
+                    val fileBytes = try {
+                        audioFile.readBytes()
+                    } finally {
+                        try { audioFile.delete() } catch (e: Throwable) {}
                     }
+
+                    if (fileBytes.size <= 44) {
+                        val duration = System.currentTimeMillis() - startTime
+                        logToDatabase(originalText, enginePackage, "FAILED", duration, "Audio file is empty or invalid header only (${fileBytes.size} bytes)", hitsJson)
+                        call.respondText("Error: Synthesized audio is empty.", status = HttpStatusCode.InternalServerError)
+                        return@withPermit
+                    }
+
+                    call.respondBytes(fileBytes, ContentType("audio", "wav"))
+
+                    val duration = System.currentTimeMillis() - startTime
+                    logToDatabase(originalText, enginePackage, "SUCCESS", duration, null, hitsJson)
                 } catch (e: Throwable) {
                     val duration = System.currentTimeMillis() - startTime
-                    logToDatabase(originalText, enginePackage, "FAILED", duration, e.message, hitsJson)
+                    if (e is kotlinx.coroutines.CancellationException || e.javaClass.name.contains("Channel") || e.javaClass.name.contains("Socket")) {
+                        logToDatabase(originalText, enginePackage, "CANCELLED", duration, e.message, hitsJson)
+                    } else {
+                        logToDatabase(originalText, enginePackage, "FAILED", duration, e.message, hitsJson)
+                    }
                 }
             }
         } catch (e: Throwable) {
@@ -363,12 +372,44 @@ class TtsServerService : Service() {
         }
     }
 
+    private var cachedSilenceWav: ByteArray? = null
+
+    private fun getSilenceWav(): ByteArray {
+        return cachedSilenceWav ?: generateSilenceWav().also { cachedSilenceWav = it }
+    }
+
+    private fun generateSilenceWav(durationMs: Int = 200, sampleRate: Int = 16000): ByteArray {
+        val numChannels = 1
+        val bitsPerSample = 16
+        val byteRate = sampleRate * numChannels * bitsPerSample / 8
+        val blockAlign = numChannels * bitsPerSample / 8
+        val numSamples = (sampleRate * (durationMs / 1000.0)).toInt()
+        val dataSize = numSamples * blockAlign
+        val totalSize = 36 + dataSize
+
+        val header = java.nio.ByteBuffer.allocate(44 + dataSize).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        header.put("RIFF".toByteArray(Charsets.US_ASCII))
+        header.putInt(totalSize)
+        header.put("WAVE".toByteArray(Charsets.US_ASCII))
+        header.put("fmt ".toByteArray(Charsets.US_ASCII))
+        header.putInt(16)
+        header.putShort(1.toShort())
+        header.putShort(numChannels.toShort())
+        header.putInt(sampleRate)
+        header.putInt(byteRate)
+        header.putShort(blockAlign.toShort())
+        header.putShort(bitsPerSample.toShort())
+        header.put("data".toByteArray(Charsets.US_ASCII))
+        header.putInt(dataSize)
+        return header.array()
+    }
+
     private fun normalizeRate(rate: Float): Float {
         if (rate <= 0f) return 1.0f
         val calculated = when {
             rate in 0.1f..4.0f -> rate
-            rate in 5.0f..40.0f -> rate / 10f
-            rate >= 50.0f -> rate / 100f
+            rate in 4.01f..40.0f -> rate / 10f
+            rate > 40.0f -> rate / 100f
             else -> rate
         }
         return calculated.coerceIn(0.1f, 4.0f)
@@ -377,12 +418,12 @@ class TtsServerService : Service() {
     private fun normalizePitch(pitch: Float): Float {
         if (pitch <= 0f) return 1.0f
         val calculated = when {
-            pitch in 0.1f..2.0f -> pitch
-            pitch in 5.0f..20.0f -> pitch / 10f
-            pitch >= 50.0f -> pitch / 100f
+            pitch in 0.1f..2.5f -> pitch
+            pitch in 2.51f..25.0f -> pitch / 10f
+            pitch > 25.0f -> pitch / 100f
             else -> pitch
         }
-        return calculated.coerceIn(0.1f, 2.0f)
+        return calculated.coerceIn(0.1f, 2.5f)
     }
 
     private fun setupTtsListener(tts: TextToSpeech) {
@@ -459,7 +500,7 @@ class TtsServerService : Service() {
         var lastError: String? = null
         for (attempt in 1..2) {
             val (file, err) = performSingleSynthesis(text, rate, pitch, enginePackage)
-            if (file != null && file.exists() && file.length() > 0) {
+            if (file != null && file.exists() && file.length() > 44) {
                 consecutiveFailureCount.set(0)
                 return Pair(file, null)
             }
@@ -492,13 +533,8 @@ class TtsServerService : Service() {
 
         val utteranceId = "tts_" + System.currentTimeMillis() + "_" + (1000..9999).random()
         val tempFile = File(cacheDir, "$utteranceId.wav")
-        try {
-            if (!tempFile.exists()) {
-                tempFile.createNewFile()
-            }
-        } catch (e: Throwable) {
-            e.printStackTrace()
-            return Pair(null, "Temp file creation failed: ${e.javaClass.name}: ${e.message}")
+        if (tempFile.exists()) {
+            try { tempFile.delete() } catch (e: Throwable) {}
         }
         val deferredResult = CompletableDeferred<Boolean>()
         pendingUtterances[utteranceId] = deferredResult
@@ -512,9 +548,6 @@ class TtsServerService : Service() {
 
         val synthResult = withContext(Dispatchers.Main) {
             try {
-                // 保证该 TTS 实例绑定全局进度监听器
-                setupTtsListener(tts)
-
                 // 设置语言 (加 try-catch 保护)
                 try {
                     val hasChinese = text.any { it.code in 0x4E00..0x9FFF }
@@ -563,9 +596,9 @@ class TtsServerService : Service() {
             return Pair(null, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
         }
 
-        // 使用 withTimeoutOrNull (20秒) 进行单次合成超时保护
+        // 使用 withTimeoutOrNull (15秒) 进行单次合成超时保护
         val waitResult = try {
-            withTimeoutOrNull(20000) {
+            withTimeoutOrNull(15000) {
                 deferredResult.await()
             }
         } catch (e: Throwable) {
@@ -577,7 +610,13 @@ class TtsServerService : Service() {
             pendingUtterances.remove(utteranceId)
         }
 
-        val fileHasData = tempFile.exists() && tempFile.length() > 0
+        // 如果明确收到 onError 回调，直接报错并清理
+        if (waitResult == false) {
+            try { tempFile.delete() } catch (e: Throwable) {}
+            return Pair(null, errorDetails ?: "TTS engine returned onError callback for utterance")
+        }
+
+        val fileHasData = tempFile.exists() && tempFile.length() > 44
 
         if (waitResult == null && !fileHasData) {
             // 超时时在 Main 线程主动调用 tts.stop()，打断并清空 TTS 引擎内部任务队列
@@ -589,15 +628,15 @@ class TtsServerService : Service() {
                 }
             }
             if (errorDetails == null) {
-                errorDetails = "UtteranceListener timeout (20s), tts.stop() invoked"
+                errorDetails = "UtteranceListener timeout (15s), tts.stop() invoked"
             }
         }
 
-        return if ((waitResult == true || fileHasData) && tempFile.exists() && tempFile.length() > 0) {
+        return if (tempFile.exists() && tempFile.length() > 44) {
             Pair(tempFile, null)
         } else {
             try { tempFile.delete() } catch (e: Throwable) {}
-            Pair(null, errorDetails ?: "Synthesized audio file missing or empty (0 bytes)")
+            Pair(null, errorDetails ?: "Synthesized audio file missing or empty (<=44 bytes)")
         }
     }
 
