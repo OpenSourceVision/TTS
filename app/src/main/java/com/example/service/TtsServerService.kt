@@ -295,7 +295,7 @@ class TtsServerService : Service() {
                 val db = AppDatabase.getDatabase(applicationContext)
                 val originalText = text
                 val ruleResult = processTextRules(originalText, db)
-                text = ruleResult.processedText
+                text = cleanAndSanitizeText(ruleResult.processedText)
                 val hitsJson = ruleResult.hits.toHitsJsonString()
 
                 val settings = db.appDao().getSettings() ?: SettingsEntity()
@@ -310,9 +310,9 @@ class TtsServerService : Service() {
                 val pitch = normalizePitch(rawPitch)
                 enginePackage = params["engine"] ?: params["e"] ?: settings.targetEnginePackage
 
-                if (text.isBlank()) {
+                if (!isSpeakableText(text)) {
                     val duration = System.currentTimeMillis() - startTime
-                    logToDatabase(originalText, enginePackage, "SUCCESS", duration, "Empty text after rule processing (returned silence audio)", hitsJson)
+                    logToDatabase(originalText, enginePackage, "SUCCESS", duration, "Text is empty or contains only punctuation/symbols (returned silence audio)", hitsJson)
                     val silenceWav = getSilenceWav()
                     call.respondBytes(silenceWav, ContentType("audio", "wav"))
                     return@withPermit
@@ -353,8 +353,18 @@ class TtsServerService : Service() {
                     logToDatabase(originalText, enginePackage, "SUCCESS", duration, null, hitsJson)
                 } catch (e: Throwable) {
                     val duration = System.currentTimeMillis() - startTime
-                    if (e is kotlinx.coroutines.CancellationException || e.javaClass.name.contains("Channel") || e.javaClass.name.contains("Socket")) {
-                        logToDatabase(originalText, enginePackage, "CANCELLED", duration, e.message, hitsJson)
+                    val msg = e.message ?: ""
+                    val isClientDisconnect = e is kotlinx.coroutines.CancellationException ||
+                            e is java.net.SocketException ||
+                            e.javaClass.name.contains("Channel") ||
+                            e.javaClass.name.contains("Socket") ||
+                            msg.contains("Broken pipe", ignoreCase = true) ||
+                            msg.contains("Connection reset", ignoreCase = true) ||
+                            msg.contains("ClosedReceiveChannelException", ignoreCase = true) ||
+                            msg.contains("ClosedWriteChannelException", ignoreCase = true)
+
+                    if (isClientDisconnect) {
+                        logToDatabase(originalText, enginePackage, "CANCELLED", duration, "客户端主动断开连接 (Broken pipe/预加载取消)", hitsJson)
                     } else {
                         logToDatabase(originalText, enginePackage, "FAILED", duration, e.message, hitsJson)
                     }
@@ -362,14 +372,50 @@ class TtsServerService : Service() {
             }
         } catch (e: Throwable) {
             val duration = System.currentTimeMillis() - startTime
-            val stackTrace = android.util.Log.getStackTraceString(e)
-            val errorMsg = "CRASH IN REQUEST: ${e.javaClass.name}: ${e.message}\n$stackTrace"
-            e.printStackTrace()
-            logToDatabase(text.ifEmpty { "Legado Request" }, enginePackage.ifEmpty { "System" }, "CRASH", duration, errorMsg, null)
-            try {
-                call.respondText("Error: Internal server processing exception (${e.message})", status = HttpStatusCode.InternalServerError)
-            } catch (ex: Throwable) {}
+            val msg = e.message ?: ""
+            val isClientDisconnect = e is kotlinx.coroutines.CancellationException ||
+                    e is java.net.SocketException ||
+                    e.javaClass.name.contains("Channel") ||
+                    e.javaClass.name.contains("Socket") ||
+                    msg.contains("Broken pipe", ignoreCase = true) ||
+                    msg.contains("Connection reset", ignoreCase = true)
+
+            if (isClientDisconnect) {
+                logToDatabase(text.ifEmpty { "Legado Request" }, enginePackage.ifEmpty { "System" }, "CANCELLED", duration, "客户端主动断开连接 (Broken pipe)", null)
+            } else {
+                val stackTrace = android.util.Log.getStackTraceString(e)
+                val errorMsg = "CRASH IN REQUEST: ${e.javaClass.name}: ${e.message}\n$stackTrace"
+                e.printStackTrace()
+                logToDatabase(text.ifEmpty { "Legado Request" }, enginePackage.ifEmpty { "System" }, "CRASH", duration, errorMsg, null)
+                try {
+                    call.respondText("Error: Internal server processing exception (${e.message})", status = HttpStatusCode.InternalServerError)
+                } catch (ex: Throwable) {}
+            }
         }
+    }
+
+    private fun cleanAndSanitizeText(raw: String): String {
+        return raw
+            .replace(Regex("[\u200B-\u200D\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F]"), "")
+            .replace(Regex("^[\\s\\u3000]+|[\\s\\u3000]+$"), "")
+            .trim()
+    }
+
+    private fun isSpeakableText(text: String): Boolean {
+        if (text.isBlank()) return false
+        for (ch in text) {
+            if (Character.isLetterOrDigit(ch)) return true
+            val block = Character.UnicodeBlock.of(ch)
+            if (block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS ||
+                block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A ||
+                block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS ||
+                block == Character.UnicodeBlock.HIRAGANA ||
+                block == Character.UnicodeBlock.KATAKANA ||
+                block == Character.UnicodeBlock.HANGUL_SYLLABLES) {
+                return true
+            }
+        }
+        return false
     }
 
     private var cachedSilenceWav: ByteArray? = null
@@ -432,16 +478,40 @@ class TtsServerService : Service() {
                 override fun onStart(id: String) {}
 
                 override fun onDone(id: String) {
-                    pendingUtterances.remove(id)?.complete(true)
+                    val deferred = pendingUtterances.remove(id)
+                    if (deferred != null) {
+                        deferred.complete(true)
+                    } else if (pendingUtterances.size == 1) {
+                        val singleEntry = pendingUtterances.entries.firstOrNull()
+                        if (singleEntry != null) {
+                            pendingUtterances.remove(singleEntry.key)?.complete(true)
+                        }
+                    }
                 }
 
                 override fun onError(id: String) {
-                    pendingUtterances.remove(id)?.complete(false)
+                    val deferred = pendingUtterances.remove(id)
+                    if (deferred != null) {
+                        deferred.complete(false)
+                    } else if (pendingUtterances.size == 1) {
+                        val singleEntry = pendingUtterances.entries.firstOrNull()
+                        if (singleEntry != null) {
+                            pendingUtterances.remove(singleEntry.key)?.complete(false)
+                        }
+                    }
                 }
 
                 @Deprecated("Deprecated in Java")
                 override fun onError(id: String, errorCode: Int) {
-                    pendingUtterances.remove(id)?.complete(false)
+                    val deferred = pendingUtterances.remove(id)
+                    if (deferred != null) {
+                        deferred.complete(false)
+                    } else if (pendingUtterances.size == 1) {
+                        val singleEntry = pendingUtterances.entries.firstOrNull()
+                        if (singleEntry != null) {
+                            pendingUtterances.remove(singleEntry.key)?.complete(false)
+                        }
+                    }
                 }
             })
         } catch (e: Throwable) {
@@ -596,9 +666,9 @@ class TtsServerService : Service() {
             return Pair(null, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
         }
 
-        // 使用 withTimeoutOrNull (15秒) 进行单次合成超时保护
+        // 使用 withTimeoutOrNull (10秒) 进行单次合成超时保护，避免阻塞客户端并发队列
         val waitResult = try {
-            withTimeoutOrNull(15000) {
+            withTimeoutOrNull(10000) {
                 deferredResult.await()
             }
         } catch (e: Throwable) {
@@ -616,9 +686,19 @@ class TtsServerService : Service() {
             return Pair(null, errorDetails ?: "TTS engine returned onError callback for utterance")
         }
 
-        val fileHasData = tempFile.exists() && tempFile.length() > 44
+        // 确保引擎文件落盘完成：如果收到 onDone 但文件大小尚未刷新，进行极短的轮询等待 (最多 300ms)
+        var fileValid = tempFile.exists() && tempFile.length() > 44
+        if (waitResult == true && !fileValid) {
+            for (i in 1..6) {
+                kotlinx.coroutines.delay(50)
+                if (tempFile.exists() && tempFile.length() > 44) {
+                    fileValid = true
+                    break
+                }
+            }
+        }
 
-        if (waitResult == null && !fileHasData) {
+        if (waitResult == null && !fileValid) {
             // 超时时在 Main 线程主动调用 tts.stop()，打断并清空 TTS 引擎内部任务队列
             withContext(Dispatchers.Main) {
                 try {
@@ -628,11 +708,11 @@ class TtsServerService : Service() {
                 }
             }
             if (errorDetails == null) {
-                errorDetails = "UtteranceListener timeout (15s), tts.stop() invoked"
+                errorDetails = "UtteranceListener timeout (10s), tts.stop() invoked"
             }
         }
 
-        return if (tempFile.exists() && tempFile.length() > 44) {
+        return if (fileValid) {
             Pair(tempFile, null)
         } else {
             try { tempFile.delete() } catch (e: Throwable) {}
