@@ -25,6 +25,15 @@ class PolyphoneResolver(
     private val context: Context,
     private val inferenceTimeoutMs: Long = 1000, // ONNX models might take a bit longer on first execution
 ) {
+    companion object {
+        private val sharedHttpClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+        }
+    }
+
     init {
         PolyphonicTable.init(context)
         DefaultReadingTable.init(context)
@@ -171,11 +180,6 @@ class PolyphoneResolver(
         """.trimIndent()
 
         try {
-            val client = OkHttpClient.Builder()
-                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
             val jsonRequest = JSONObject().apply {
                 put("model", modelName)
                 val messagesArray = JSONArray().apply {
@@ -200,7 +204,7 @@ class PolyphoneResolver(
                 reqBuilder.addHeader("Authorization", "Bearer $apiKey")
             }
 
-            val response = client.newCall(reqBuilder.build()).execute()
+            val response = sharedHttpClient.newCall(reqBuilder.build()).execute()
             if (!response.isSuccessful) {
                 android.util.Log.e("LocalG2P", "Request failed with code: ${response.code}")
                 return@withContext null
@@ -261,11 +265,6 @@ class PolyphoneResolver(
         """.trimIndent()
 
         try {
-            val client = OkHttpClient.Builder()
-                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
             val jsonRequest = JSONObject().apply {
                 val contentsArray = JSONArray().apply {
                     val contentObj = JSONObject().apply {
@@ -295,7 +294,7 @@ class PolyphoneResolver(
                 .post(requestBody)
                 .build()
 
-            val response = client.newCall(request).execute()
+            val response = sharedHttpClient.newCall(request).execute()
             if (!response.isSuccessful) {
                 android.util.Log.e("GeminiG2P", "Request failed with code: ${response.code}")
                 return@withContext null

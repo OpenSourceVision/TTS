@@ -93,8 +93,10 @@ class CrashHandler private constructor(private val context: Context) : Thread.Un
                 )
                 runCatching {
                     val dao = db.appDao()
-                    kotlinx.coroutines.runBlocking {
-                        dao.insertHistory(history)
+                    kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                        kotlinx.coroutines.withTimeoutOrNull(1000) {
+                            dao.insertHistory(history)
+                        }
                     }
                 }
             } catch (e: Throwable) {
