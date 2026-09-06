@@ -57,6 +57,7 @@ fun RulesScreen(
     var editingRule by remember { mutableStateOf<RuleEntity?>(null) }
     var ruleTargetInput by remember { mutableStateOf("") }
     var ruleReplacementInput by remember { mutableStateOf("") }
+    var userModifiedReplacement by remember { mutableStateOf(false) }
 
     // Track expanded state for each group (collapsed by default)
     val expandedGroups = remember { mutableStateMapOf<Long, Boolean>() }
@@ -352,7 +353,8 @@ fun RulesScreen(
                                             targetGroupIdForRule = group.id
                                             editingRule = null
                                             ruleTargetInput = ""
-                                            ruleReplacementInput = group.replacement
+                                            ruleReplacementInput = ""
+                                            userModifiedReplacement = false
                                             showRuleDialog = true
                                         },
                                         modifier = Modifier
@@ -513,6 +515,7 @@ fun RulesScreen(
                                                             editingRule = rule
                                                             ruleTargetInput = rule.target
                                                             ruleReplacementInput = rule.replacement
+                                                            userModifiedReplacement = true
                                                             showRuleDialog = true
                                                         },
                                                         modifier = Modifier.size(32.dp)
@@ -625,6 +628,36 @@ fun RulesScreen(
 
     // Dialog: Add / Edit Rule
     if (showRuleDialog) {
+        val currentGroupForRule = remember(targetGroupIdForRule, ruleGroupsList) {
+            ruleGroupsList.firstOrNull { it.id == targetGroupIdForRule }
+        }
+        val groupMapping = remember(currentGroupForRule) {
+            extractGroupMapping(currentGroupForRule)
+        }
+
+        // 实时检测是否重复输入
+        val trimmedTarget = ruleTargetInput.trim()
+        val currentEditingRule = editingRule
+        val duplicateRule = remember(trimmedTarget, rulesList, currentEditingRule) {
+            if (trimmedTarget.isEmpty()) null
+            else {
+                rulesList.firstOrNull { rule ->
+                    (currentEditingRule == null || rule.id != currentEditingRule.id) &&
+                    rule.target.trim().equals(trimmedTarget, ignoreCase = true)
+                }
+            }
+        }
+        val duplicateGroupName = remember(duplicateRule, ruleGroupsList) {
+            duplicateRule?.let { rule ->
+                val g = ruleGroupsList.firstOrNull { it.id == rule.groupId }
+                if (g != null) {
+                    if (g.replacement.isNotBlank()) "${g.name} → ${g.replacement}" else g.name
+                } else {
+                    "默认分组"
+                }
+            } ?: ""
+        }
+
         AlertDialog(
             onDismissRequest = { showRuleDialog = false },
             title = {
@@ -638,26 +671,154 @@ fun RulesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    // 分组与自动补齐状态提示
+                    if (currentGroupForRule != null) {
+                        val groupTitle = if (currentGroupForRule.replacement.isNotBlank()) {
+                            "${currentGroupForRule.name} → ${currentGroupForRule.replacement}"
+                        } else {
+                            currentGroupForRule.name
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Folder,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "分组: $groupTitle",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (groupMapping != null) {
+                                    Text(
+                                        text = "⚡已开启自动补齐",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 匹配词输入框
                     OutlinedTextField(
                         value = ruleTargetInput,
-                        onValueChange = { ruleTargetInput = it },
+                        onValueChange = { newTarget ->
+                            ruleTargetInput = newTarget
+                            // 当输入匹配词时，若属于具有映射的分组（如长—尝），且替换词未被手动修改，则自动补齐
+                            if (groupMapping != null && !userModifiedReplacement) {
+                                val (src, dst) = groupMapping
+                                if (newTarget.contains(src)) {
+                                    ruleReplacementInput = newTarget.replace(src, dst)
+                                } else if (newTarget.isEmpty()) {
+                                    ruleReplacementInput = ""
+                                }
+                            }
+                        },
                         label = { Text("匹配词 / 正则表达式") },
-                        placeholder = { Text("例如：重心 或 (\\b行\\b)") },
+                        placeholder = { Text("例如：长相厮守 或 重心") },
+                        isError = duplicateRule != null,
                         modifier = Modifier.fillMaxWidth().testTag("rule_target_input"),
-                        minLines = 3,
-                        maxLines = 6,
+                        minLines = 2,
+                        maxLines = 5,
                         shape = RoundedCornerShape(12.dp)
                     )
 
+                    // 重复输入警告提示
+                    AnimatedVisibility(visible = duplicateRule != null) {
+                        duplicateRule?.let { dup ->
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Warning,
+                                        contentDescription = "重复警告",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "检测到重复规则！",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        Text(
+                                            text = "「${dup.target}」已在「$duplicateGroupName」中存在（替换为：${dup.replacement}）",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 替换为输入框
                     OutlinedTextField(
                         value = ruleReplacementInput,
-                        onValueChange = { ruleReplacementInput = it },
+                        onValueChange = { newRepl ->
+                            ruleReplacementInput = newRepl
+                            userModifiedReplacement = newRepl.isNotBlank()
+                        },
                         label = { Text("替换为") },
-                        placeholder = { Text("例如：众心 或 形") },
+                        placeholder = { Text("例如：尝相厮守 或 众心") },
+                        trailingIcon = {
+                            if (groupMapping != null && ruleTargetInput.isNotBlank()) {
+                                val (src, dst) = groupMapping
+                                if (ruleTargetInput.contains(src)) {
+                                    IconButton(
+                                        onClick = {
+                                            ruleReplacementInput = ruleTargetInput.replace(src, dst)
+                                            userModifiedReplacement = false
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.AutoFixHigh,
+                                            contentDescription = "根据分组规则补齐",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth().testTag("rule_replacement_input"),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
+
+                    if (groupMapping != null) {
+                        val (src, dst) = groupMapping
+                        Text(
+                            text = "💡 提示：输入含「$src」的词会自动填充为含「$dst」",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -669,6 +830,12 @@ fun RulesScreen(
 
                         if (target.isEmpty() || replacement.isEmpty()) {
                             Toast.makeText(context, "输入不能为空", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+
+                        // 重复输入拦截提示
+                        if (duplicateRule != null) {
+                            Toast.makeText(context, "匹配词「$target」已在「$duplicateGroupName」中存在，请勿重复添加！", Toast.LENGTH_LONG).show()
                             return@Button
                         }
 
@@ -700,6 +867,7 @@ fun RulesScreen(
                         }
                         showRuleDialog = false
                     },
+                    enabled = duplicateRule == null,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.testTag("save_rule_button")
                 ) {
@@ -767,4 +935,32 @@ fun RulesScreen(
             }
         )
     }
+}
+
+/**
+ * 从规则分组中提取「源字符/词」到「替换字符/词」的映射对
+ * 常见命名习惯支持：
+ * 1. 组名含连接符：如 "长—尝"、"长-尝"、"长->尝"、"长→尝"、"长/尝"、"长:尝"、"长：尝"、"长~尝"、"长～尝"、"长转尝"
+ * 2. 组名填写原字（如 "长"），替代音字字段填写（如 "尝"）
+ */
+internal fun extractGroupMapping(group: RuleGroupEntity?): Pair<String, String>? {
+    if (group == null) return null
+    val rawName = group.name.trim()
+    val rawRepl = group.replacement.trim()
+
+    // 1. 尝试从 group.name 解析分隔符（例如：长—尝、长-尝、长->尝、长→尝、长/尝、长:尝、长：尝、长转尝、长~尝等）
+    val splitRegex = Regex("""[—―–\-\->→:：/～~转]+""")
+    val parts = rawName.split(splitRegex).map { it.trim() }.filter { it.isNotEmpty() }
+    if (parts.size >= 2) {
+        val src = parts[0]
+        val dst = if (rawRepl.isNotEmpty()) rawRepl else parts[1]
+        return Pair(src, dst)
+    }
+
+    // 2. 如果 group.name 为源字/词，group.replacement 为目标字/词
+    if (rawName.isNotEmpty() && rawRepl.isNotEmpty()) {
+        return Pair(rawName, rawRepl)
+    }
+
+    return null
 }
