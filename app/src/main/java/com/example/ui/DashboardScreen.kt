@@ -97,7 +97,7 @@ fun DashboardScreen(
     val engines by viewModel.engines.collectAsState()
     val isServerRunning by TtsServerService.isServerRunning.collectAsState()
 
-    var testText by remember { mutableStateOf("天真烂漫的微风吹拂着山谷，少年抬起头看向远方的地平线，心中充满了无限的希望与勇气。") }
+    var testText by remember { mutableStateOf("世界是你们的，也是我们的，但是归根结底还是你们的。") }
     val isTesting by viewModel.isTesting.collectAsState()
     var showPortDialog by remember { mutableStateOf(false) }
     var showSpeechRateDialog by remember { mutableStateOf(false) }

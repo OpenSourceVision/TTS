@@ -27,7 +27,7 @@ class GreetingScreenshotTest {
   fun greeting_screenshot() {
     val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     val database = AppDatabase.getDatabase(context)
-    val viewModel = TtsViewModel(database)
+    val viewModel = TtsViewModel(context, database)
     
     composeTestRule.setContent {
       MyApplicationTheme {

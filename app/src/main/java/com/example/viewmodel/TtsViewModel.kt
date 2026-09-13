@@ -128,14 +128,26 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
             
             // Populate default or restored rules if there are no rule groups at all
             val existingGroups = appDao.getAllRuleGroups()
-            if (existingGroups.isEmpty()) {
+            val existingRules = appDao.getAllRules()
+            // Detect old regex templates or previous incorrect group names (like 一重-一虫) and upgrade to word groups
+            val hasChangGroup = existingGroups.any { it.name.contains("长") }
+            val hasExcessRules = existingGroups.any { g -> existingRules.count { it.groupId == g.id } > 1 }
+            val isOldOrIncorrectTemplate = existingGroups.any { it.name == "一重-一虫" } ||
+                (existingRules.isNotEmpty() && existingRules.all { rule ->
+                    rule.target.contains("(?<=") || rule.target.contains("(?=") || rule.target == "重(?=要|心)"
+                })
+            if (existingGroups.isEmpty() || isOldOrIncorrectTemplate) {
+                if (isOldOrIncorrectTemplate) {
+                    appDao.clearAllRules()
+                    appDao.clearAllRuleGroups()
+                }
                 // 1. Try auto-restoring from local persistent auto-backup file (e.g. from Download directory)
-                val restoredLocally = tryRestoreFromLocalAutoBackup()
+                val restoredLocally = if (isOldOrIncorrectTemplate) false else tryRestoreFromLocalAutoBackup()
                 if (!restoredLocally) {
                     // 2. Try auto-restoring from WebDAV if configured
                     val settings = appDao.getSettings()
                     var restoredWebDav = false
-                    if (settings != null && settings.webdavUrl.isNotBlank()) {
+                    if (settings != null && settings.webdavUrl.isNotBlank() && !isOldOrIncorrectTemplate) {
                         val rulesFileName = if (settings.webdavPath.isNotBlank()) settings.webdavPath else "tts_rules_backup.json"
                         val downloadRulesResult = WebDavHelper.downloadFile(
                             url = settings.webdavUrl,
@@ -156,6 +168,22 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                         setupDefaultReferenceRules()
                     }
                 }
+            } else if (hasChangGroup || hasExcessRules) {
+                // 删除长相关分组及其规则，并确保每个分组只保留一个规则
+                existingGroups.filter { it.name.contains("长") }.forEach { g ->
+                    appDao.deleteRulesByGroupId(g.id)
+                    appDao.deleteRuleGroupById(g.id)
+                }
+                val remainingGroups = appDao.getAllRuleGroups()
+                for (g in remainingGroups) {
+                    val gRules = appDao.getRulesForGroup(g.id)
+                    if (gRules.size > 1) {
+                        for (i in 1 until gRules.size) {
+                            appDao.deleteRuleById(gRules[i].id)
+                        }
+                    }
+                }
+                RuleCache.clear()
             } else {
                 // Ensure persistent local auto-backup file is up to date
                 saveAutoBackupToExternalStorage()
@@ -163,27 +191,27 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         }
     }
 
-    private suspend fun setupDefaultReferenceRules() {
-        // 1. Group: "重" -> "众"
-        val group1Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "众"))
+    suspend fun setupDefaultReferenceRules() {
+        // 1. 分组: "重-虫"，只保留一个规则
+        val group1Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重-虫", replacement = ""))
         appDao.insertRule(
             RuleEntity(
                 groupId = group1Id,
-                target = "重(?=要|心)",
-                replacement = "众",
+                target = "一重",
+                replacement = "一虫",
                 matchWord = "",
                 isForwardMatch = true,
                 isEnabled = true
             )
         )
 
-        // 2. Group: "重" -> "虫"
-        val group2Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重", replacement = "虫"))
+        // 2. 分组: "重-众"，只保留一个规则
+        val group2Id = appDao.insertRuleGroup(RuleGroupEntity(name = "重-众", replacement = ""))
         appDao.insertRule(
             RuleEntity(
                 groupId = group2Id,
-                target = "(?<=[一二三四五六七八九十])重",
-                replacement = "虫",
+                target = "重要",
+                replacement = "众要",
                 matchWord = "",
                 isForwardMatch = true,
                 isEnabled = true
@@ -191,6 +219,16 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         )
 
         RuleCache.clear()
+    }
+
+    fun resetToDefaultTemplate() {
+        viewModelScope.launch(Dispatchers.IO) {
+            appDao.clearAllRules()
+            appDao.clearAllRuleGroups()
+            setupDefaultReferenceRules()
+            RuleCache.clear()
+            _toastEvent.emit("已恢复默认规则（重-虫、重-众）")
+        }
     }
 
     fun loadEngines(context: Context) {

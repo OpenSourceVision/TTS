@@ -44,6 +44,7 @@ fun RulesScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var showClearAllConfirmDialog by remember { mutableStateOf(false) }
+    var showResetDefaultConfirmDialog by remember { mutableStateOf(false) }
 
     // Dialog state for Groups
     var showGroupDialog by remember { mutableStateOf(false) }
@@ -217,6 +218,21 @@ fun RulesScreen(
                                 onDismissRequest = { showMoreMenu = false }
                             ) {
                                 DropdownMenuItem(
+                                    text = { Text("恢复默认规则", style = MaterialTheme.typography.bodyMedium) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        showResetDefaultConfirmDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Refresh,
+                                            contentDescription = "恢复默认规则",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("清空所有规则", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) },
                                     onClick = {
                                         showMoreMenu = false
@@ -274,7 +290,7 @@ fun RulesScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = if (searchQuery.isEmpty()) "暂无规则分组，请点击右上角新增" else "没有找到匹配的分组或词条",
+                            text = if (searchQuery.isEmpty()) "暂无规则分组" else "无匹配结果",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -328,7 +344,7 @@ fun RulesScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (group.replacement.isNotBlank()) "${group.name} → ${group.replacement}" else group.name,
+                                        text = formatGroupTitle(group),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -429,7 +445,7 @@ fun RulesScreen(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = "该分组暂无规则，点击上方 '+' 图标添加词条",
+                                                text = "暂无规则",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -569,16 +585,11 @@ fun RulesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "分组用于归类管理，例如：多音字字头归类。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
                     OutlinedTextField(
                         value = groupNameInput,
                         onValueChange = { groupNameInput = it },
-                        label = { Text("分组字 / 目标字 (如：重)") },
+                        label = { Text("分组名称") },
+                        placeholder = { Text("如：重-虫") },
                         modifier = Modifier.fillMaxWidth().testTag("group_name_input"),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
@@ -587,7 +598,8 @@ fun RulesScreen(
                     OutlinedTextField(
                         value = groupReplacementInput,
                         onValueChange = { groupReplacementInput = it },
-                        label = { Text("替代音字 (如：众，可选)") },
+                        label = { Text("替代词/字 (可选)") },
+                        placeholder = { Text("如：虫") },
                         modifier = Modifier.fillMaxWidth().testTag("group_replacement_input"),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
@@ -651,7 +663,7 @@ fun RulesScreen(
             duplicateRule?.let { rule ->
                 val g = ruleGroupsList.firstOrNull { it.id == rule.groupId }
                 if (g != null) {
-                    if (g.replacement.isNotBlank()) "${g.name} → ${g.replacement}" else g.name
+                    formatGroupTitle(g)
                 } else {
                     "默认分组"
                 }
@@ -671,13 +683,9 @@ fun RulesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // 分组与自动补齐状态提示
+                    // 所属分组提示
                     if (currentGroupForRule != null) {
-                        val groupTitle = if (currentGroupForRule.replacement.isNotBlank()) {
-                            "${currentGroupForRule.name} → ${currentGroupForRule.replacement}"
-                        } else {
-                            currentGroupForRule.name
-                        }
+                        val groupTitle = formatGroupTitle(currentGroupForRule)
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -699,17 +707,8 @@ fun RulesScreen(
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                                if (groupMapping != null) {
-                                    Text(
-                                        text = "⚡已开启自动补齐",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
                             }
                         }
                     }
@@ -719,18 +718,18 @@ fun RulesScreen(
                         value = ruleTargetInput,
                         onValueChange = { newTarget ->
                             ruleTargetInput = newTarget
-                            // 当输入匹配词时，若属于具有映射的分组（如长—尝），且替换词未被手动修改，则自动补齐
+                            // 当输入匹配词时，若属于具有映射的分组（如重-虫），且替换词未被手动修改，则自动补齐
                             if (groupMapping != null && !userModifiedReplacement) {
-                                val (src, dst) = groupMapping
-                                if (newTarget.contains(src)) {
-                                    ruleReplacementInput = newTarget.replace(src, dst)
+                                val smartRepl = computeSmartReplacement(newTarget, groupMapping)
+                                if (smartRepl != null) {
+                                    ruleReplacementInput = smartRepl
                                 } else if (newTarget.isEmpty()) {
                                     ruleReplacementInput = ""
                                 }
                             }
                         },
-                        label = { Text("匹配词 / 正则表达式") },
-                        placeholder = { Text("例如：长相厮守 或 重心") },
+                        label = { Text("匹配词") },
+                        placeholder = { Text("如：一重") },
                         isError = duplicateRule != null,
                         modifier = Modifier.fillMaxWidth().testTag("rule_target_input"),
                         minLines = 2,
@@ -759,19 +758,11 @@ fun RulesScreen(
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = "检测到重复规则！",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                        Text(
-                                            text = "「${dup.target}」已在「$duplicateGroupName」中存在（替换为：${dup.replacement}）",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
+                                    Text(
+                                        text = "「${dup.target}」已在「$duplicateGroupName」中存在",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
                                 }
                             }
                         }
@@ -785,24 +776,25 @@ fun RulesScreen(
                             userModifiedReplacement = newRepl.isNotBlank()
                         },
                         label = { Text("替换为") },
-                        placeholder = { Text("例如：尝相厮守 或 众心") },
+                        placeholder = { Text("如：一虫") },
                         trailingIcon = {
-                            if (groupMapping != null && ruleTargetInput.isNotBlank()) {
-                                val (src, dst) = groupMapping
-                                if (ruleTargetInput.contains(src)) {
-                                    IconButton(
-                                        onClick = {
-                                            ruleReplacementInput = ruleTargetInput.replace(src, dst)
-                                            userModifiedReplacement = false
-                                        }
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.AutoFixHigh,
-                                            contentDescription = "根据分组规则补齐",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                            val smartRepl = if (groupMapping != null && ruleTargetInput.isNotBlank()) {
+                                computeSmartReplacement(ruleTargetInput, groupMapping)
+                            } else null
+
+                            if (smartRepl != null) {
+                                IconButton(
+                                    onClick = {
+                                        ruleReplacementInput = smartRepl
+                                        userModifiedReplacement = false
                                     }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.AutoFixHigh,
+                                        contentDescription = "自动补齐",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         },
@@ -810,15 +802,6 @@ fun RulesScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
-
-                    if (groupMapping != null) {
-                        val (src, dst) = groupMapping
-                        Text(
-                            text = "💡 提示：输入含「$src」的词会自动填充为含「$dst」",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
             },
             confirmButton = {
@@ -935,20 +918,74 @@ fun RulesScreen(
             }
         )
     }
+
+    // Dialog: Confirm Reset Default Rules
+    if (showResetDefaultConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDefaultConfirmDialog = false },
+            title = {
+                Text(
+                    text = "恢复默认规则",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "确定要恢复默认规则吗？原有规则将被覆盖。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.resetToDefaultTemplate()
+                        showResetDefaultConfirmDialog = false
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("恢复")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showResetDefaultConfirmDialog = false },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
+
+/**
+ * 格式化分组标题：
+ * 若组名本身已经包含连接符（如 "重-虫"、"长-尝"、"重—众"），则直接显示组名，避免出现 "长-尝 → 尝" 等冗余显示；
+ * 仅当组名未含连接符且填写了替代音字段（如 name="重", replacement="虫"）时，才显示 "重 → 虫"。
+ */
+internal fun formatGroupTitle(group: RuleGroupEntity): String {
+    val name = group.name.trim()
+    val repl = group.replacement.trim()
+    val splitRegex = Regex("""[—―–\-\->→:：/～~转]+""")
+    if (name.contains(splitRegex)) {
+        return name
+    }
+    return if (repl.isNotBlank()) "$name → $repl" else name
 }
 
 /**
  * 从规则分组中提取「源字符/词」到「替换字符/词」的映射对
  * 常见命名习惯支持：
- * 1. 组名含连接符：如 "长—尝"、"长-尝"、"长->尝"、"长→尝"、"长/尝"、"长:尝"、"长：尝"、"长~尝"、"长～尝"、"长转尝"
- * 2. 组名填写原字（如 "长"），替代音字字段填写（如 "尝"）
+ * 1. 组名含连接符：如 "重-虫"、"长—尝"、"长-尝"、"长->尝"、"长→尝"、"长/尝"、"长:尝"、"长：尝"、"长~尝"、"长～尝"、"长转尝"
+ * 2. 组名填写原字/词（如 "重" 或 "长"），替代音字字段填写（如 "虫" 或 "尝"）
  */
 internal fun extractGroupMapping(group: RuleGroupEntity?): Pair<String, String>? {
     if (group == null) return null
     val rawName = group.name.trim()
     val rawRepl = group.replacement.trim()
 
-    // 1. 尝试从 group.name 解析分隔符（例如：长—尝、长-尝、长->尝、长→尝、长/尝、长:尝、长：尝、长转尝、长~尝等）
+    // 1. 尝试从 group.name 解析分隔符（例如：重-虫、长—尝、长-尝、长->尝、长→尝、长/尝、长:尝、长：尝、长转尝、长~尝等）
     val splitRegex = Regex("""[—―–\-\->→:：/～~转]+""")
     val parts = rawName.split(splitRegex).map { it.trim() }.filter { it.isNotEmpty() }
     if (parts.size >= 2) {
@@ -962,5 +999,31 @@ internal fun extractGroupMapping(group: RuleGroupEntity?): Pair<String, String>?
         return Pair(rawName, rawRepl)
     }
 
+    return null
+}
+
+/**
+ * 智能推导替换词：
+ * 1. 完整包含源词：例如 分组为 一重-一虫，输入 一重 -> 一虫；输入 一重山 -> 一虫山；或者 长-尝，输入 长相厮守 -> 尝相厮守
+ * 2. 词语组核心多音字推导：例如 分组为 一重-一虫，输入 两重、九重天、双重 时，自动发现核心字变化 重->虫，替换为 两虫、九虫天、双虫
+ */
+internal fun computeSmartReplacement(target: String, groupMapping: Pair<String, String>?): String? {
+    if (groupMapping == null || target.isBlank()) return null
+    val (src, dst) = groupMapping
+    // 1. 目标词包含完整的 src 词语
+    if (target.contains(src)) {
+        return target.replace(src, dst)
+    }
+    // 2. 若 src 与 dst 等长且大于1字（如 一重 与 一虫），检测其单字差异
+    if (src.length == dst.length && src.length > 1) {
+        val diffIndices = src.indices.filter { src[it] != dst[it] }
+        if (diffIndices.size == 1) {
+            val charSrc = src[diffIndices[0]].toString()
+            val charDst = dst[diffIndices[0]].toString()
+            if (target.contains(charSrc)) {
+                return target.replace(charSrc, charDst)
+            }
+        }
+    }
     return null
 }
