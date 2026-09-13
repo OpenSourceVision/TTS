@@ -5,6 +5,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.AppDatabase
 import com.example.ui.DashboardScreen
+import com.example.ui.RulesScreen
+import com.example.ui.LogsScreen
+import com.example.ui.SettingsScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.TtsViewModel
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
@@ -35,6 +38,51 @@ class GreetingScreenshotTest {
       }
     }
 
-    composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/greeting.png")
+    composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/dashboard.png")
+  }
+
+  @Test
+  fun rules_screenshot() {
+    val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    val database = AppDatabase.getDatabase(context)
+    val viewModel = TtsViewModel(context, database)
+    
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        RulesScreen(viewModel = viewModel)
+      }
+    }
+
+    composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/rules.png")
+  }
+
+  @Test
+  fun logs_screenshot() {
+    val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    val database = AppDatabase.getDatabase(context)
+    val viewModel = TtsViewModel(context, database)
+    
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        LogsScreen(viewModel = viewModel)
+      }
+    }
+
+    composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/logs.png")
+  }
+
+  @Test
+  fun settings_screenshot() {
+    val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    val database = AppDatabase.getDatabase(context)
+    val viewModel = TtsViewModel(context, database)
+    
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        SettingsScreen(viewModel = viewModel)
+      }
+    }
+
+    composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/settings.png")
   }
 }

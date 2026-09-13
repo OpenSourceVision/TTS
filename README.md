@@ -24,6 +24,22 @@
 
 ---
 
+## 📱 界面预览
+
+<div align="center">
+
+| 控制台 (Dashboard) | 发音规则 (Rules) |
+| :---: | :---: |
+| <img src="docs/screenshots/dashboard.png" width="270" alt="控制台与朗读测试" /> | <img src="docs/screenshots/rules.png" width="270" alt="发音替换与多音字规则" /> |
+
+| 实时日志 (Logs) | 系统设置 (Settings) |
+| :---: | :---: |
+| <img src="docs/screenshots/logs.png" width="270" alt="请求明细与耗时诊断" /> | <img src="docs/screenshots/settings.png" width="270" alt="WebDAV备份与保活设置" /> |
+
+</div>
+
+---
+
 ## 🚀 阅读（Legado）配置指南
 
 服务开启后，默认监听 `http://127.0.0.1:8080`（支持 `/`、`/tts`、`/api/tts` 路径，支持 GET 与 POST）。
