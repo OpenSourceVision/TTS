@@ -1,12 +1,16 @@
 package com.example.viewmodel
 
 import java.io.File
+import android.os.Build
 import android.os.Environment
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
@@ -128,26 +132,14 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
             
             // Populate default or restored rules if there are no rule groups at all
             val existingGroups = appDao.getAllRuleGroups()
-            val existingRules = appDao.getAllRules()
-            // Detect old regex templates or previous incorrect group names (like 一重-一虫) and upgrade to word groups
-            val hasChangGroup = existingGroups.any { it.name.contains("长") }
-            val hasExcessRules = existingGroups.any { g -> existingRules.count { it.groupId == g.id } > 1 }
-            val isOldOrIncorrectTemplate = existingGroups.any { it.name == "一重-一虫" } ||
-                (existingRules.isNotEmpty() && existingRules.all { rule ->
-                    rule.target.contains("(?<=") || rule.target.contains("(?=") || rule.target == "重(?=要|心)"
-                })
-            if (existingGroups.isEmpty() || isOldOrIncorrectTemplate) {
-                if (isOldOrIncorrectTemplate) {
-                    appDao.clearAllRules()
-                    appDao.clearAllRuleGroups()
-                }
-                // 1. Try auto-restoring from local persistent auto-backup file (e.g. from Download directory)
-                val restoredLocally = if (isOldOrIncorrectTemplate) false else tryRestoreFromLocalAutoBackup()
+            if (existingGroups.isEmpty()) {
+                // 1. 优先尝试从本地持久化备份（SharedPreferences / 下载目录 / 应用文档等）自动恢复
+                val restoredLocally = tryRestoreFromLocalAutoBackup()
                 if (!restoredLocally) {
-                    // 2. Try auto-restoring from WebDAV if configured
+                    // 2. 尝试从配置的 WebDAV 恢复
                     val settings = appDao.getSettings()
                     var restoredWebDav = false
-                    if (settings != null && settings.webdavUrl.isNotBlank() && !isOldOrIncorrectTemplate) {
+                    if (settings != null && settings.webdavUrl.isNotBlank()) {
                         val rulesFileName = if (settings.webdavPath.isNotBlank()) settings.webdavPath else "tts_rules_backup.json"
                         val downloadRulesResult = WebDavHelper.downloadFile(
                             url = settings.webdavUrl,
@@ -158,34 +150,15 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                         )
                         if (downloadRulesResult.isSuccess) {
                             val content = downloadRulesResult.getOrThrow()
-                            val pkg = BackupPackage.fromJsonString(content)
-                            if (pkg != null) {
-                                restoredWebDav = importBackupPackageInternal(pkg)
-                            }
+                            restoredWebDav = tryParseAndImportBackup(content)
                         }
                     }
                     if (!restoredWebDav) {
                         setupDefaultReferenceRules()
                     }
                 }
-            } else if (hasChangGroup || hasExcessRules) {
-                // 删除长相关分组及其规则，并确保每个分组只保留一个规则
-                existingGroups.filter { it.name.contains("长") }.forEach { g ->
-                    appDao.deleteRulesByGroupId(g.id)
-                    appDao.deleteRuleGroupById(g.id)
-                }
-                val remainingGroups = appDao.getAllRuleGroups()
-                for (g in remainingGroups) {
-                    val gRules = appDao.getRulesForGroup(g.id)
-                    if (gRules.size > 1) {
-                        for (i in 1 until gRules.size) {
-                            appDao.deleteRuleById(gRules[i].id)
-                        }
-                    }
-                }
-                RuleCache.clear()
             } else {
-                // Ensure persistent local auto-backup file is up to date
+                // 用户已有规则：严禁删减或修改！完整保留用户建立的所有规则，并更新多层本地持久化备份副本
                 saveAutoBackupToExternalStorage()
             }
         }
@@ -1184,6 +1157,36 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         }
     }
 
+    private suspend fun tryParseAndImportBackup(content: String): Boolean {
+        if (content.isBlank()) return false
+        try {
+            // 1. 尝试作为 CombinedBackupPackage
+            val combined = CombinedBackupPackage.fromJsonString(content)
+            if (combined?.rulesPackage != null) {
+                val res = importBackupPackageInternal(combined.rulesPackage)
+                if (res) return true
+            }
+
+            // 2. 尝试作为 BackupPackage
+            val pkg = BackupPackage.fromJsonString(content)
+            if (pkg != null && pkg.rulesJson.isNotBlank() && pkg.rulesJson != "[]") {
+                val res = importBackupPackageInternal(pkg)
+                if (res) return true
+            }
+
+            // 3. 尝试作为原始 JSON 数组
+            val trimmed = content.trim()
+            if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                val rawPkg = BackupPackage(version = 1, rulesJson = trimmed)
+                val res = importBackupPackageInternal(rawPkg)
+                if (res) return true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return false
+    }
+
     private suspend fun saveAutoBackupToExternalStorage() {
         withContext(Dispatchers.IO) {
             try {
@@ -1191,21 +1194,90 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                 if (jsonStr.isBlank() || jsonStr == "[]") return@withContext
                 val pkgStr = BackupPackage(version = 1, rulesJson = jsonStr).toJsonString()
 
-                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                if (downloadsDir != null) {
-                    if (!downloadsDir.exists()) downloadsDir.mkdirs()
-                    File(downloadsDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                // 1. 保存到 SharedPreferences（应用进程内最稳定，同时随系统云备份与设备换机迁移）
+                try {
+                    val prefs = context.getSharedPreferences("tts_persistent_backup", Context.MODE_PRIVATE)
+                    prefs.edit().putString("auto_backup_rules", pkgStr).apply()
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
 
-                val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-                if (docsDir != null) {
-                    if (!docsDir.exists()) docsDir.mkdirs()
-                    File(docsDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                // 2. 保存到应用私有内部存储
+                try {
+                    File(context.filesDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
 
-                val extFilesDir = context.getExternalFilesDir(null)
-                if (extFilesDir != null) {
-                    File(extFilesDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                // 3. 保存到应用专属外部存储
+                try {
+                    val extFilesDir = context.getExternalFilesDir(null)
+                    if (extFilesDir != null) {
+                        File(extFilesDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
+                // 4. 保存到系统公开 Download 目录（Android 10+ 借助 MediaStore 写入，卸载重装仍保留）
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val resolver = context.contentResolver
+                        val projection = arrayOf(MediaStore.MediaColumns._ID)
+                        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+                        val selectionArgs = arrayOf("tts_rules_auto_backup.json")
+                        val existingUri = resolver.query(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            projection,
+                            selection,
+                            selectionArgs,
+                            null
+                        )?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
+                                ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
+                            } else null
+                        }
+
+                        val targetUri = existingUri ?: run {
+                            val values = ContentValues().apply {
+                                put(MediaStore.MediaColumns.DISPLAY_NAME, "tts_rules_auto_backup.json")
+                                put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                            }
+                            resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                        }
+
+                        if (targetUri != null) {
+                            resolver.openOutputStream(targetUri, "wt")?.use { out ->
+                                out.write(pkgStr.toByteArray(Charsets.UTF_8))
+                                out.flush()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
+                // 5. 传统路径直写兜底（兼容 Android 9 及以下或定制 ROM）
+                try {
+                    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    if (downloadsDir != null) {
+                        if (!downloadsDir.exists()) downloadsDir.mkdirs()
+                        File(downloadsDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                    }
+                } catch (e: Exception) {
+                    // 作用域存储限制忽略
+                }
+
+                try {
+                    val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+                    if (docsDir != null) {
+                        if (!docsDir.exists()) docsDir.mkdirs()
+                        File(docsDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
+                    }
+                } catch (e: Exception) {
+                    // 作用域存储限制忽略
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -1216,38 +1288,126 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
     private suspend fun tryRestoreFromLocalAutoBackup(): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val candidateFiles = mutableListOf<File>()
-
-                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                if (downloadsDir != null) {
-                    candidateFiles.add(File(downloadsDir, "tts_rules_auto_backup.json"))
-                    candidateFiles.add(File(downloadsDir, "tts_rules_backup.json"))
-                    candidateFiles.add(File(downloadsDir, "TTS_Rules_Backup.json"))
-                    candidateFiles.add(File(downloadsDir, "TTS_Forwarder_Backup.json"))
-                }
-                val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-                if (docsDir != null) {
-                    candidateFiles.add(File(docsDir, "tts_rules_auto_backup.json"))
-                    candidateFiles.add(File(docsDir, "tts_rules_backup.json"))
-                    candidateFiles.add(File(docsDir, "TTS_Rules_Backup.json"))
-                    candidateFiles.add(File(docsDir, "TTS_Forwarder_Backup.json"))
-                }
-                val extFilesDir = context.getExternalFilesDir(null)
-                if (extFilesDir != null) {
-                    candidateFiles.add(File(extFilesDir, "tts_rules_auto_backup.json"))
-                    candidateFiles.add(File(extFilesDir, "tts_rules_backup.json"))
+                // 1. 检查 SharedPreferences 持久化备份
+                try {
+                    val prefs = context.getSharedPreferences("tts_persistent_backup", Context.MODE_PRIVATE)
+                    val prefContent = prefs.getString("auto_backup_rules", null)
+                    if (!prefContent.isNullOrBlank()) {
+                        val restored = tryParseAndImportBackup(prefContent)
+                        if (restored) return@withContext true
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
 
-                for (file in candidateFiles) {
-                    if (file.exists() && file.length() > 0) {
-                        val content = file.readText(Charsets.UTF_8)
-                        val pkg = BackupPackage.fromJsonString(content)
-                        if (pkg != null && pkg.rulesJson.isNotBlank() && pkg.rulesJson != "[]") {
-                            val restored = importBackupPackageInternal(pkg)
-                            if (restored) return@withContext true
+                // 2. 检查应用内部私有文件
+                try {
+                    val internalFile = File(context.filesDir, "tts_rules_auto_backup.json")
+                    if (internalFile.exists() && internalFile.length() > 0) {
+                        val content = internalFile.readText(Charsets.UTF_8)
+                        val restored = tryParseAndImportBackup(content)
+                        if (restored) return@withContext true
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
+                // 3. 检查应用专属外部存储
+                try {
+                    val extFilesDir = context.getExternalFilesDir(null)
+                    if (extFilesDir != null) {
+                        val candidates = listOf(
+                            File(extFilesDir, "tts_rules_auto_backup.json"),
+                            File(extFilesDir, "tts_rules_backup.json")
+                        )
+                        for (file in candidates) {
+                            if (file.exists() && file.length() > 0) {
+                                val content = file.readText(Charsets.UTF_8)
+                                val restored = tryParseAndImportBackup(content)
+                                if (restored) return@withContext true
+                            }
                         }
                     }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
+
+                // 4. 检查 MediaStore 外部下载目录（跨重装保留）
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    try {
+                        val resolver = context.contentResolver
+                        val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
+                        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
+                        val selectionArgs = arrayOf("%tts%backup%.json")
+                        resolver.query(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            projection,
+                            selection,
+                            selectionArgs,
+                            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+                        )?.use { cursor ->
+                            val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                            while (cursor.moveToNext()) {
+                                val id = cursor.getLong(idCol)
+                                val uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
+                                try {
+                                    resolver.openInputStream(uri)?.use { stream ->
+                                        val content = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                                        val restored = tryParseAndImportBackup(content)
+                                        if (restored) return@withContext true
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+
+                // 5. 检查公开 Download 与 Documents 目录
+                val publicDirs = listOfNotNull(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+                )
+                val candidateNames = listOf(
+                    "tts_rules_auto_backup.json",
+                    "tts_rules_backup.json",
+                    "TTS_Rules_Backup.json",
+                    "TTS_Forwarder_Backup.json"
+                )
+                for (dir in publicDirs) {
+                    if (!dir.exists() || !dir.isDirectory) continue
+                    for (name in candidateNames) {
+                        val file = File(dir, name)
+                        if (file.exists() && file.length() > 0) {
+                            try {
+                                val content = file.readText(Charsets.UTF_8)
+                                val restored = tryParseAndImportBackup(content)
+                                if (restored) return@withContext true
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+                    }
+                    try {
+                        val matchingFiles = dir.listFiles { f ->
+                            f.isFile && (f.name.startsWith("TTS_Forwarder_Backup") || f.name.contains("tts_rules")) && f.name.endsWith(".json")
+                        }
+                        matchingFiles?.sortByDescending { it.lastModified() }
+                        matchingFiles?.forEach { file ->
+                            if (file.length() > 0) {
+                                val content = file.readText(Charsets.UTF_8)
+                                val restored = tryParseAndImportBackup(content)
+                                if (restored) return@withContext true
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+
                 false
             } catch (e: Exception) {
                 e.printStackTrace()
