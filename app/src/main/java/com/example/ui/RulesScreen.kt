@@ -98,20 +98,10 @@ fun RulesScreen(
         }
     }
 
-    // Auto expand groups when searching
+    // 搜索时，分组默认折叠
     LaunchedEffect(searchQuery) {
         if (searchQuery.isNotBlank()) {
-            ruleGroupsList.forEach { group ->
-                val hasMatchingRule = rulesList.any { rule ->
-                    rule.groupId == group.id && (
-                        rule.target.contains(searchQuery, ignoreCase = true) ||
-                        rule.replacement.contains(searchQuery, ignoreCase = true)
-                    )
-                }
-                if (hasMatchingRule) {
-                    expandedGroups[group.id] = true
-                }
-            }
+            expandedGroups.clear()
         }
     }
 
