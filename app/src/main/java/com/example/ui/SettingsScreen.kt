@@ -1,6 +1,8 @@
 package com.example.ui
 
-import androidx.compose.foundation.BorderStroke
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,81 +10,69 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.ArrowDropDown
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.ui.res.painterResource
-import androidx.compose.material3.Switch
-import android.widget.Toast
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.platform.LocalContext
-import com.example.data.SettingsEntity
+import com.example.R
+import com.example.ui.miuix.MiuixActionButton
+import com.example.ui.miuix.MiuixButtonVariant
+import com.example.ui.miuix.MiuixCard
+import com.example.ui.miuix.MiuixDialog
+import com.example.ui.miuix.MiuixDropdownMenu
+import com.example.ui.miuix.MiuixDropdownMenuItem
+import com.example.ui.miuix.MiuixHairlineDivider
+import com.example.ui.miuix.MiuixIconButton
+import com.example.ui.miuix.MiuixLargeHeader
+import com.example.ui.miuix.MiuixSmallTitle
+import com.example.ui.miuix.MiuixSuperArrowRow
+import com.example.ui.miuix.MiuixSuperSwitchRow
+import com.example.ui.miuix.MiuixTextField
+import com.example.ui.theme.MiuixTheme
 import com.example.viewmodel.TtsViewModel
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class LanguageOption(val label: String, val language: String, val country: String)
 
 val languageOptions = listOf(
-    LanguageOption("中文 (中国)", "zh", "CN")
+    LanguageOption("简体中文", "zh", "CN")
 )
 
 @Composable
@@ -94,6 +84,7 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val colors = MiuixTheme.colors
 
     var webdavUrl by remember { mutableStateOf(settings.webdavUrl) }
     var webdavUsername by remember { mutableStateOf(settings.webdavUsername) }
@@ -113,216 +104,128 @@ fun SettingsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(colors.background)
             .verticalScroll(scrollState)
-            .padding(16.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
-        // Settings Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "设置",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            IconButton(
-                onClick = {
-                    try {
-                        uriHandler.openUri("https://github.com/OpenSourceVision/TTS")
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "无法打开网页: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.size(48.dp).testTag("github_logo_button")
-            ) {
-                Icon(
-                    painter = painterResource(id = com.example.R.drawable.ic_github),
-                    contentDescription = "GitHub 项目地址",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(30.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 1. General Settings Section (Theme & Language combined)
-        Text(
-            text = "通用设置",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            )
-        ) {
-            Column {
-                // Theme Selection Row
-                var dropdownExpanded by remember { mutableStateOf(false) }
-                val themeLabel = when (settings.themeMode) {
-                    1 -> "浅色模式"
-                    2 -> "深色模式"
-                    else -> "跟随系统 (自动)"
-                }
-
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { dropdownExpanded = true }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "主题模式",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = themeLabel,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Outlined.ArrowDropDown,
-                            contentDescription = "选择主题",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = dropdownExpanded,
-                        onDismissRequest = { dropdownExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("跟随系统 (自动)") },
-                            onClick = {
-                                viewModel.updateSettings(settings.copy(themeMode = 0))
-                                dropdownExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("浅色模式") },
-                            onClick = {
-                                viewModel.updateSettings(settings.copy(themeMode = 1))
-                                dropdownExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("深色模式") },
-                            onClick = {
-                                viewModel.updateSettings(settings.copy(themeMode = 2))
-                                dropdownExpanded = false
-                            }
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
-
-                // Dynamic Theme Option
-                Row(
+        MiuixLargeHeader(
+            title = "设置",
+            actions = {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .minimumInteractiveComponentSize()
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable {
+                            try {
+                                uriHandler.openUri("https://github.com/OpenSourceVision/TTS")
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "无法打开网页: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        .testTag("github_logo_button"),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "动态主题",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.weight(1f)
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_github),
+                        contentDescription = "GitHub",
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(23.dp)
                     )
-                    Switch(
-                        checked = settings.useDynamicColor,
-                        onCheckedChange = { isChecked ->
-                            viewModel.updateSettings(settings.copy(useDynamicColor = isChecked))
+                }
+            }
+        )
+
+        // 1. General
+        MiuixSmallTitle(text = "通用")
+
+        MiuixCard {
+            var themeDropdownExpanded by remember { mutableStateOf(false) }
+            val themeLabel = when (settings.themeMode) {
+                1 -> "浅色"
+                2 -> "深色"
+                else -> "自动"
+            }
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                MiuixSuperArrowRow(
+                    title = "主题",
+                    endValue = themeLabel,
+                    isDropdown = true,
+                    onClick = { themeDropdownExpanded = true }
+                )
+
+                MiuixDropdownMenu(
+                    expanded = themeDropdownExpanded,
+                    onDismissRequest = { themeDropdownExpanded = false }
+                ) {
+                    MiuixDropdownMenuItem(
+                        text = "跟随系统",
+                        selected = settings.themeMode == 0,
+                        onClick = {
+                            viewModel.updateSettings(settings.copy(themeMode = 0))
+                            themeDropdownExpanded = false
+                        }
+                    )
+                    MiuixDropdownMenuItem(
+                        text = "浅色",
+                        selected = settings.themeMode == 1,
+                        onClick = {
+                            viewModel.updateSettings(settings.copy(themeMode = 1))
+                            themeDropdownExpanded = false
+                        }
+                    )
+                    MiuixDropdownMenuItem(
+                        text = "深色",
+                        selected = settings.themeMode == 2,
+                        onClick = {
+                            viewModel.updateSettings(settings.copy(themeMode = 2))
+                            themeDropdownExpanded = false
                         }
                     )
                 }
+            }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+            MiuixHairlineDivider(insetStart = 16.dp)
 
-                // Language Selection Row
-                var langDropdownExpanded by remember { mutableStateOf(false) }
-                val currentOption = languageOptions.find { it.language.lowercase() == settings.language.lowercase() && it.country.lowercase() == settings.country.lowercase() }
-                    ?: LanguageOption("${settings.language} (${settings.country})", settings.language, settings.country)
+            var langDropdownExpanded by remember { mutableStateOf(false) }
+            val currentOption = languageOptions.find {
+                it.language.lowercase() == settings.language.lowercase() &&
+                    it.country.lowercase() == settings.country.lowercase()
+            } ?: LanguageOption("${settings.language} (${settings.country})", settings.language, settings.country)
 
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { langDropdownExpanded = true }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "默认语言",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = currentOption.label,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Outlined.ArrowDropDown,
-                            contentDescription = "选择语言",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            Box(modifier = Modifier.fillMaxWidth()) {
+                MiuixSuperArrowRow(
+                    title = "语言",
+                    endValue = currentOption.label,
+                    isDropdown = true,
+                    onClick = { langDropdownExpanded = true }
+                )
+
+                MiuixDropdownMenu(
+                    expanded = langDropdownExpanded,
+                    onDismissRequest = { langDropdownExpanded = false }
+                ) {
+                    languageOptions.forEach { option ->
+                        MiuixDropdownMenuItem(
+                            text = option.label,
+                            selected = option.language == currentOption.language && option.country == currentOption.country,
+                            onClick = {
+                                viewModel.updateSettings(
+                                    settings.copy(language = option.language, country = option.country)
+                                )
+                                langDropdownExpanded = false
+                            }
                         )
-                    }
-
-                    DropdownMenu(
-                        expanded = langDropdownExpanded,
-                        onDismissRequest = { langDropdownExpanded = false }
-                    ) {
-                        languageOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option.label) },
-                                onClick = {
-                                    viewModel.updateSettings(settings.copy(language = option.language, country = option.country))
-                                    langDropdownExpanded = false
-                                }
-                            )
-                        }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        // 2. Background / Battery
+        MiuixSmallTitle(text = "后台")
 
-        // 3. Battery Optimization Card
-        Text(
-            text = "电池优化",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        val context = LocalContext.current
         var isBatteryOptimizing by remember { mutableStateOf(viewModel.isIgnoringBatteryOptimizations(context)) }
-
         val lifecycleOwner = LocalLifecycleOwner.current
         DisposableEffect(lifecycleOwner) {
             val observer = LifecycleEventObserver { _, event ->
@@ -336,53 +239,19 @@ fun SettingsScreen(
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        MiuixCard {
+            MiuixSuperSwitchRow(
+                title = "忽略电池优化",
+                checked = isBatteryOptimizing,
+                onCheckedChange = {
+                    viewModel.requestIgnoreBatteryOptimizations(context)
+                },
+                switchModifier = Modifier.testTag("battery_optimization_button")
             )
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "后台保护设置",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "加入电池优化白名单，保障后台稳定运行。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = isBatteryOptimizing,
-                        onCheckedChange = {
-                            viewModel.requestIgnoreBatteryOptimizations(context)
-                        },
-                        modifier = Modifier.testTag("battery_optimization_button")
-                    )
-                }
-            }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 4. Backup & Restore Card
-        Text(
-            text = "备份恢复",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // 3. Backup & Restore
+        MiuixSmallTitle(text = "备份")
 
         val coroutineScope = rememberCoroutineScope()
 
@@ -396,7 +265,7 @@ fun SettingsScreen(
                         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                             outputStream.write(jsonContent.toByteArray(Charsets.UTF_8))
                         }
-                        Toast.makeText(context, "备份文件导出成功", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "导出成功", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Toast.makeText(context, "导出失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                     }
@@ -411,7 +280,7 @@ fun SettingsScreen(
                 coroutineScope.launch {
                     try {
                         context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                            val reader = java.io.BufferedReader(java.io.InputStreamReader(inputStream))
+                            val reader = BufferedReader(InputStreamReader(inputStream))
                             val stringBuilder = StringBuilder()
                             var line: String?
                             while (reader.readLine().also { line = it } != null) {
@@ -419,290 +288,125 @@ fun SettingsScreen(
                             }
                             viewModel.restoreFromLocalString(stringBuilder.toString()) { result ->
                                 if (!result.isSuccess) {
-                                    Toast.makeText(context, "恢复失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(
+                                        context,
+                                        "恢复失败: ${result.exceptionOrNull()?.localizedMessage}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                             }
                         }
                     } catch (e: Exception) {
-                        Toast.makeText(context, "读取备份文件失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "读取失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                // Local Backup Row
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(32.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "本地备份",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            val formattedDate = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())
-                            fileExportLauncher.launch("TTS_Forwarder_Backup_$formattedDate.json")
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)),
-                        modifier = Modifier.weight(1f).testTag("local_backup_button")
-                    ) {
-                        Text("备份", style = MaterialTheme.typography.bodySmall)
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            fileImportLauncher.launch("application/json")
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)),
-                        modifier = Modifier.weight(1f).testTag("local_restore_button")
-                    ) {
-                        Text("恢复", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // WebDav Backup Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "WebDAV",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    IconButton(
-                        onClick = { showWebdavConfigDialog = true },
-                        modifier = Modifier.size(32.dp).testTag("webdav_config_trigger")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Settings,
-                            contentDescription = "WebDAV 配置",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    var syncingBackup by remember { mutableStateOf(false) }
-                    var syncingRestore by remember { mutableStateOf(false) }
-
-                    OutlinedButton(
-                        onClick = {
-                            if (settings.webdavUrl.isBlank()) {
-                                Toast.makeText(context, "请先配置 WebDAV 服务器", Toast.LENGTH_SHORT).show()
-                                showWebdavConfigDialog = true
-                                return@OutlinedButton
-                            }
-                            syncingBackup = true
-                            viewModel.backupToWebDav { result ->
-                                syncingBackup = false
-                                if (!result.isSuccess) {
-                                    Toast.makeText(context, "备份失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
-                        enabled = !syncingBackup,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)),
-                        modifier = Modifier.weight(1f).testTag("webdav_backup_now_button")
-                    ) {
-                        Text(if (syncingBackup) "备份中..." else "备份", style = MaterialTheme.typography.bodySmall)
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            if (settings.webdavUrl.isBlank()) {
-                                Toast.makeText(context, "请先配置 WebDAV 服务器", Toast.LENGTH_SHORT).show()
-                                showWebdavConfigDialog = true
-                                return@OutlinedButton
-                            }
-                            syncingRestore = true
-                            viewModel.restoreFromWebDav { result ->
-                                syncingRestore = false
-                                if (!result.isSuccess) {
-                                    Toast.makeText(context, "恢复失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
-                        enabled = !syncingRestore,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)),
-                        modifier = Modifier.weight(1f).testTag("webdav_restore_now_button")
-                    ) {
-                        Text(if (syncingRestore) "恢复中..." else "恢复", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
-
-        if (showWebdavConfigDialog) {
-            AlertDialog(
-                onDismissRequest = { showWebdavConfigDialog = false },
-                title = {
-                    Text(
-                        text = "配置 WebDAV",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+        MiuixCard {
+            MiuixSuperArrowRow(
+                title = "本地备份",
+                endValue = "导出",
+                onClick = {
+                    val formattedDate = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                    fileExportLauncher.launch("TTS_Forwarder_Backup_$formattedDate.json")
                 },
-                text = {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = webdavUrl,
-                            onValueChange = { webdavUrl = it.trim() },
-                            label = { Text("WebDAV 服务器地址") },
-                            placeholder = { Text("如: https://dav.jianguoyun.com/dav/") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("webdav_url_input")
-                        )
+                modifier = Modifier.testTag("local_backup_button")
+            )
 
-                        OutlinedTextField(
-                            value = webdavUsername,
-                            onValueChange = { webdavUsername = it.trim() },
-                            label = { Text("用户名/邮箱") },
-                            placeholder = { Text("WebDAV 账号") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("webdav_username_input")
-                        )
+            MiuixHairlineDivider(insetStart = 16.dp)
 
-                        OutlinedTextField(
-                            value = webdavPassword,
-                            onValueChange = { webdavPassword = it.trim() },
-                            label = { Text("密码/应用授权密码") },
-                            placeholder = { Text("WebDAV 密码") },
-                            singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(),
-                            modifier = Modifier.fillMaxWidth().testTag("webdav_password_input")
-                        )
+            MiuixSuperArrowRow(
+                title = "本地恢复",
+                endValue = "导入",
+                onClick = {
+                    fileImportLauncher.launch("application/json")
+                },
+                modifier = Modifier.testTag("local_restore_button")
+            )
+        }
 
-                        OutlinedTextField(
-                            value = webdavDir,
-                            onValueChange = { webdavDir = it.trim() },
-                            label = { Text("云端备份目录") },
-                            placeholder = { Text("TTS") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("webdav_dir_input")
-                        )
+        Spacer(modifier = Modifier.height(10.dp))
 
-                        OutlinedTextField(
-                            value = webdavPath,
-                            onValueChange = { webdavPath = it.trim() },
-                            label = { Text("云端备份文件名") },
-                            placeholder = { Text("tts_rules_backup.json") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("webdav_path_input")
-                        )
+        MiuixCard {
+            MiuixSuperArrowRow(
+                title = "WebDAV",
+                endValue = if (settings.webdavUrl.isBlank()) "未配置" else "配置",
+                onClick = { showWebdavConfigDialog = true },
+                modifier = Modifier.testTag("webdav_config_trigger")
+            )
 
-                        Spacer(modifier = Modifier.height(4.dp))
+            MiuixHairlineDivider(insetStart = 16.dp)
 
-                        var testingConnection by remember { mutableStateOf(false) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                var syncingBackup by remember { mutableStateOf(false) }
+                var syncingRestore by remember { mutableStateOf(false) }
 
-                        OutlinedButton(
-                            onClick = {
-                                if (webdavUrl.isBlank()) {
-                                    Toast.makeText(context, "请先输入服务器地址", Toast.LENGTH_SHORT).show()
-                                    return@OutlinedButton
-                                }
-                                testingConnection = true
-                                viewModel.testWebDavConnection(webdavUrl, webdavUsername, webdavPassword, webdavDir) { result ->
-                                    testingConnection = false
-                                    if (result.isSuccess) {
-                                        Toast.makeText(context, "连接测试成功！配置正确", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "连接测试失败: ${result.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                            },
-                            enabled = !testingConnection,
-                            modifier = Modifier.fillMaxWidth().testTag("webdav_test_button")
-                        ) {
-                            Text(if (testingConnection) "连接测试中..." else "测试连接")
+                MiuixActionButton(
+                    text = if (syncingBackup) "备份中..." else "备份",
+                    onClick = {
+                        if (settings.webdavUrl.isBlank()) {
+                            Toast.makeText(context, "请先配置 WebDAV", Toast.LENGTH_SHORT).show()
+                            showWebdavConfigDialog = true
+                            return@MiuixActionButton
                         }
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            viewModel.updateSettings(
-                                settings.copy(
-                                    webdavUrl = webdavUrl,
-                                    webdavUsername = webdavUsername,
-                                    webdavPassword = webdavPassword,
-                                    webdavPath = webdavPath,
-                                    webdavDir = webdavDir
-                                )
-                            )
-                            Toast.makeText(context, "同步配置已保存", Toast.LENGTH_SHORT).show()
-                            showWebdavConfigDialog = false
-                        },
-                        modifier = Modifier.testTag("webdav_save_button")
-                    ) {
-                        Text("保存")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { showWebdavConfigDialog = false },
-                        modifier = Modifier.testTag("webdav_config_cancel")
-                    ) {
-                        Text("取消")
-                    }
-                }
-            )
+                        syncingBackup = true
+                        viewModel.backupToWebDav { result ->
+                            syncingBackup = false
+                            if (!result.isSuccess) {
+                                Toast.makeText(
+                                    context,
+                                    "备份失败: ${result.exceptionOrNull()?.localizedMessage}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    enabled = !syncingBackup,
+                    variant = MiuixButtonVariant.TonalPrimary,
+                    height = 42.dp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("webdav_backup_now_button")
+                )
+
+                MiuixActionButton(
+                    text = if (syncingRestore) "恢复中..." else "恢复",
+                    onClick = {
+                        if (settings.webdavUrl.isBlank()) {
+                            Toast.makeText(context, "请先配置 WebDAV", Toast.LENGTH_SHORT).show()
+                            showWebdavConfigDialog = true
+                            return@MiuixActionButton
+                        }
+                        syncingRestore = true
+                        viewModel.restoreFromWebDav { result ->
+                            syncingRestore = false
+                            if (!result.isSuccess) {
+                                Toast.makeText(
+                                    context,
+                                    "恢复失败: ${result.exceptionOrNull()?.localizedMessage}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    enabled = !syncingRestore,
+                    variant = MiuixButtonVariant.Secondary,
+                    height = 42.dp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("webdav_restore_now_button")
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 5. Version Info Card
-        Text(
-            text = "版本信息",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // 4. Version
+        MiuixSmallTitle(text = "关于")
 
         val packageInfo = remember {
             try {
@@ -713,33 +417,136 @@ fun SettingsScreen(
         }
         val versionName = packageInfo?.versionName ?: "1.0.0"
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        MiuixCard {
+            MiuixSuperArrowRow(
+                title = "版本",
+                endValue = "v$versionName",
+                showArrow = false
             )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "当前版本",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "v$versionName",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    if (showWebdavConfigDialog) {
+        MiuixDialog(
+            onDismissRequest = { showWebdavConfigDialog = false },
+            title = "WebDAV",
+            content = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MiuixTextField(
+                        value = webdavUrl,
+                        onValueChange = { webdavUrl = it.trim() },
+                        label = "服务器地址",
+                        placeholder = "https://dav.jianguoyun.com/dav/",
+                        singleLine = true,
+                        modifier = Modifier.testTag("webdav_url_input")
+                    )
+
+                    MiuixTextField(
+                        value = webdavUsername,
+                        onValueChange = { webdavUsername = it.trim() },
+                        label = "账号",
+                        placeholder = "用户名或邮箱",
+                        singleLine = true,
+                        modifier = Modifier.testTag("webdav_username_input")
+                    )
+
+                    MiuixTextField(
+                        value = webdavPassword,
+                        onValueChange = { webdavPassword = it.trim() },
+                        label = "密码",
+                        placeholder = "应用授权密码",
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.testTag("webdav_password_input")
+                    )
+
+                    MiuixTextField(
+                        value = webdavDir,
+                        onValueChange = { webdavDir = it.trim() },
+                        label = "目录",
+                        placeholder = "TTS",
+                        singleLine = true,
+                        modifier = Modifier.testTag("webdav_dir_input")
+                    )
+
+                    MiuixTextField(
+                        value = webdavPath,
+                        onValueChange = { webdavPath = it.trim() },
+                        label = "文件名",
+                        placeholder = "tts_rules_backup.json",
+                        singleLine = true,
+                        modifier = Modifier.testTag("webdav_path_input")
+                    )
+
+                    var testingConnection by remember { mutableStateOf(false) }
+
+                    MiuixActionButton(
+                        text = if (testingConnection) "测试中..." else "测试连接",
+                        onClick = {
+                            if (webdavUrl.isBlank()) {
+                                Toast.makeText(context, "请输入服务器地址", Toast.LENGTH_SHORT).show()
+                                return@MiuixActionButton
+                            }
+                            testingConnection = true
+                            viewModel.testWebDavConnection(webdavUrl, webdavUsername, webdavPassword, webdavDir) { result ->
+                                testingConnection = false
+                                if (result.isSuccess) {
+                                    Toast.makeText(context, "连接成功", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "连接失败: ${result.exceptionOrNull()?.localizedMessage}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        },
+                        enabled = !testingConnection,
+                        variant = MiuixButtonVariant.TonalPrimary,
+                        height = 42.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("webdav_test_button")
+                    )
+                }
+            },
+            buttons = {
+                MiuixActionButton(
+                    text = "取消",
+                    onClick = { showWebdavConfigDialog = false },
+                    variant = MiuixButtonVariant.Secondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("webdav_config_cancel")
+                )
+                MiuixActionButton(
+                    text = "保存",
+                    onClick = {
+                        viewModel.updateSettings(
+                            settings.copy(
+                                webdavUrl = webdavUrl,
+                                webdavUsername = webdavUsername,
+                                webdavPassword = webdavPassword,
+                                webdavPath = webdavPath,
+                                webdavDir = webdavDir
+                            )
+                        )
+                        Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
+                        showWebdavConfigDialog = false
+                    },
+                    variant = MiuixButtonVariant.Primary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("webdav_save_button")
+                )
+            }
+        )
     }
 }

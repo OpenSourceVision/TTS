@@ -3,20 +3,51 @@ package com.example.ui
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
@@ -27,8 +58,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.RuleEntity
 import com.example.data.RuleGroupEntity
-import com.example.viewmodel.TtsViewModel
+import com.example.ui.miuix.MiuixActionButton
+import com.example.ui.miuix.MiuixButtonVariant
+import com.example.ui.miuix.MiuixCard
+import com.example.ui.miuix.MiuixDialog
+import com.example.ui.miuix.MiuixDropdownMenu
+import com.example.ui.miuix.MiuixDropdownMenuItem
+import com.example.ui.miuix.MiuixHairlineDivider
+import com.example.ui.miuix.MiuixIconButton
+import com.example.ui.miuix.MiuixLargeHeader
+import com.example.ui.miuix.MiuixSearchBar
+import com.example.ui.miuix.MiuixSwitch
+import com.example.ui.miuix.MiuixTextField
+import com.example.ui.theme.MiuixTheme
 import com.example.viewmodel.GroupSortOrder
+import com.example.viewmodel.TtsViewModel
 
 @Composable
 fun RulesScreen(
@@ -36,6 +80,7 @@ fun RulesScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val colors = MiuixTheme.colors
     val rulesList by viewModel.rulesState.collectAsState()
     val ruleGroupsList by viewModel.ruleGroupsState.collectAsState()
 
@@ -70,12 +115,12 @@ fun RulesScreen(
         } else {
             ruleGroupsList.filter { group ->
                 val groupMatches = group.name.contains(searchQuery, ignoreCase = true) ||
-                        group.replacement.contains(searchQuery, ignoreCase = true)
+                    group.replacement.contains(searchQuery, ignoreCase = true)
                 val hasMatchingRule = rulesList.any { rule ->
                     rule.groupId == group.id && (
                         rule.target.contains(searchQuery, ignoreCase = true) ||
-                        rule.replacement.contains(searchQuery, ignoreCase = true)
-                    )
+                            rule.replacement.contains(searchQuery, ignoreCase = true)
+                        )
                 }
                 groupMatches || hasMatchingRule
             }
@@ -108,217 +153,154 @@ fun RulesScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(colors.background)
+            .padding(horizontal = 14.dp)
     ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Header Section: Title, Sort Dropdown & Compact Add Group Button
+            // Header Section
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "规则",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Sort Button
+                MiuixLargeHeader(
+                    title = "规则",
+                    actions = {
                         Box {
-                            IconButton(
+                            MiuixIconButton(
                                 onClick = { showSortMenu = true },
-                                modifier = Modifier
-                                    .testTag("sort_groups_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Sort,
-                                    contentDescription = "排序",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+                                icon = Icons.AutoMirrored.Rounded.Sort,
+                                contentDescription = "排序",
+                                tint = colors.textPrimary,
+                                modifier = Modifier.testTag("sort_groups_button")
+                            )
 
-                            DropdownMenu(
+                            MiuixDropdownMenu(
                                 expanded = showSortMenu,
                                 onDismissRequest = { showSortMenu = false }
                             ) {
                                 GroupSortOrder.values().forEach { order ->
-                                    DropdownMenuItem(
-                                        text = { Text(order.label, style = MaterialTheme.typography.bodyMedium) },
+                                    MiuixDropdownMenuItem(
+                                        text = order.label,
+                                        selected = sortOrder == order,
                                         onClick = {
                                             viewModel.updateRuleSortOrder(order)
                                             showSortMenu = false
-                                        },
-                                        leadingIcon = {
-                                            if (sortOrder == order) {
-                                                Icon(
-                                                    imageVector = Icons.Outlined.Check,
-                                                    contentDescription = "已选择",
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
                                         }
                                     )
                                 }
                             }
                         }
 
-                        // Compact Add Group IconButton ("只显示一个+号")
-                        IconButton(
+                        MiuixIconButton(
                             onClick = {
                                 editingGroup = null
                                 groupNameInput = ""
                                 groupReplacementInput = ""
                                 showGroupDialog = true
                             },
-                            modifier = Modifier
-                                .testTag("add_group_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Add,
-                                contentDescription = "新增分组",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                            icon = Icons.Rounded.Add,
+                            contentDescription = "新增分组",
+                            tint = colors.primary,
+                            modifier = Modifier.testTag("add_group_button")
+                        )
 
-                        // More options menu for built-in rules & clearing
                         Box {
-                            IconButton(
+                            MiuixIconButton(
                                 onClick = { showMoreMenu = true },
+                                icon = Icons.Rounded.MoreHoriz,
+                                contentDescription = "更多选项",
+                                tint = colors.textPrimary,
                                 modifier = Modifier.testTag("more_rules_options_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.MoreVert,
-                                    contentDescription = "更多选项",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            DropdownMenu(
+                            )
+
+                            MiuixDropdownMenu(
                                 expanded = showMoreMenu,
                                 onDismissRequest = { showMoreMenu = false }
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("恢复默认规则", style = MaterialTheme.typography.bodyMedium) },
+                                MiuixDropdownMenuItem(
+                                    text = "恢复默认规则",
+                                    leadingIcon = Icons.Rounded.Refresh,
                                     onClick = {
                                         showMoreMenu = false
                                         showResetDefaultConfirmDialog = true
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Refresh,
-                                            contentDescription = "恢复默认规则",
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
                                     }
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("清空所有规则", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) },
+                                MiuixDropdownMenuItem(
+                                    text = "清空所有规则",
+                                    leadingIcon = Icons.Rounded.DeleteOutline,
+                                    isDestructive = true,
                                     onClick = {
                                         showMoreMenu = false
                                         showClearAllConfirmDialog = true
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Delete,
-                                            contentDescription = "清空",
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
                                     }
                                 )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Search Filter Text Field (Comfortable height)
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("搜索分组或词条", style = MaterialTheme.typography.bodyMedium) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = "Search", modifier = Modifier.size(16.dp)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("search_rules_input"),
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = { searchQuery = "" },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(Icons.Outlined.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp))
                             }
                         }
                     }
                 )
             }
 
+            // Miuix Pill Search Bar
+            item {
+                MiuixSearchBar(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = "搜索",
+                    modifier = Modifier.testTag("search_rules_input")
+                )
+            }
+
             // Groups and Inner Rules Listing
             if (sortedGroups.isEmpty()) {
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (searchQuery.isEmpty()) "暂无规则分组" else "无匹配结果",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    MiuixCard {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (searchQuery.isEmpty()) "暂无规则" else "无匹配结果",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.textSecondary
+                            )
+                        }
                     }
                 }
             } else {
                 items(sortedGroups, key = { it.id }) { group ->
                     val isExpanded = expandedGroups[group.id] ?: false
-                    val arrowRotation by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f)
+                    val arrowRotation by animateFloatAsState(
+                        targetValue = if (isExpanded) 180f else 0f,
+                        label = "groupArrow"
+                    )
 
-                    // Retrieve rules under this group (filtered by search if any)
                     val groupRules = rulesList.filter { rule ->
                         rule.groupId == group.id && (
                             searchQuery.isBlank() ||
-                            rule.target.contains(searchQuery, ignoreCase = true) ||
-                            rule.replacement.contains(searchQuery, ignoreCase = true) ||
-                            group.name.contains(searchQuery, ignoreCase = true) ||
-                            group.replacement.contains(searchQuery, ignoreCase = true)
-                        )
+                                rule.target.contains(searchQuery, ignoreCase = true) ||
+                                rule.replacement.contains(searchQuery, ignoreCase = true) ||
+                                group.name.contains(searchQuery, ignoreCase = true) ||
+                                group.replacement.contains(searchQuery, ignoreCase = true)
+                            )
                     }
 
-                    Card(
+                    MiuixCard(
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("group_card_${group.id}"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f))
+                            .clip(RoundedCornerShape(16.dp))
+                            .testTag("group_card_${group.id}")
                     ) {
                         Column {
-                            // Group Title Row (clickable to collapse/expand - comfortably spacious heights & paddings)
+                            // Group Header Row
+                            var showGroupMenu by remember { mutableStateOf(false) }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { expandedGroups[group.id] = !isExpanded }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -327,33 +309,40 @@ fun RulesScreen(
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Outlined.Folder,
+                                        imageVector = Icons.Rounded.Folder,
                                         contentDescription = "Group",
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = colors.primary,
                                         modifier = Modifier.size(20.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
                                     Text(
                                         text = formatGroupTitle(group),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.textPrimary,
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "(${groupRules.size})",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(colors.surfaceSecondary)
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "${groupRules.size}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = colors.textSecondary
+                                        )
+                                    }
                                 }
 
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
-                                    // Add rule inside this group
                                     IconButton(
                                         onClick = {
                                             targetGroupIdForRule = group.id
@@ -364,155 +353,153 @@ fun RulesScreen(
                                             showRuleDialog = true
                                         },
                                         modifier = Modifier
-                                            .size(32.dp)
+                                            .size(34.dp)
                                             .testTag("add_rule_in_group_${group.id}")
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Outlined.Add,
+                                            imageVector = Icons.Rounded.Add,
                                             contentDescription = "在此分组新增规则",
-                                            tint = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.size(18.dp)
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
 
-                                    // Edit Group
-                                    IconButton(
-                                        onClick = {
-                                            editingGroup = group
-                                            groupNameInput = group.name
-                                            groupReplacementInput = group.replacement
-                                            showGroupDialog = true
-                                        },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Edit,
-                                            contentDescription = "编辑分组",
-                                            tint = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                                    Box {
+                                        IconButton(
+                                            onClick = { showGroupMenu = true },
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.MoreHoriz,
+                                                contentDescription = "分组操作",
+                                                tint = colors.textSecondary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
 
-                                    // Delete Group
-                                    IconButton(
-                                        onClick = {
-                                            viewModel.deleteRuleGroup(group.id)
-                                        },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Delete,
-                                            contentDescription = "删除分组",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                        MiuixDropdownMenu(
+                                            expanded = showGroupMenu,
+                                            onDismissRequest = { showGroupMenu = false }
+                                        ) {
+                                            MiuixDropdownMenuItem(
+                                                text = "编辑分组",
+                                                leadingIcon = Icons.Rounded.Edit,
+                                                onClick = {
+                                                    showGroupMenu = false
+                                                    editingGroup = group
+                                                    groupNameInput = group.name
+                                                    groupReplacementInput = group.replacement
+                                                    showGroupDialog = true
+                                                }
+                                            )
+                                            MiuixDropdownMenuItem(
+                                                text = "删除分组",
+                                                leadingIcon = Icons.Rounded.DeleteOutline,
+                                                isDestructive = true,
+                                                onClick = {
+                                                    showGroupMenu = false
+                                                    viewModel.deleteRuleGroup(group.id)
+                                                }
+                                            )
+                                        }
                                     }
 
                                     Icon(
-                                        imageVector = Icons.Outlined.KeyboardArrowDown,
+                                        imageVector = Icons.Rounded.KeyboardArrowDown,
                                         contentDescription = if (isExpanded) "收起" else "展开",
-                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        tint = colors.textTertiary,
                                         modifier = Modifier
-                                            .size(18.dp)
+                                            .size(20.dp)
                                             .rotate(arrowRotation)
                                     )
                                 }
                             }
 
-                            // Expandable rules list
+                            // Expandable Rules List
                             AnimatedVisibility(visible = isExpanded) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(MaterialTheme.colorScheme.background)
                                         .padding(bottom = 6.dp)
                                 ) {
                                     if (groupRules.isEmpty()) {
+                                        MiuixHairlineDivider(insetStart = 14.dp, insetEnd = 14.dp)
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(vertical = 12.dp),
+                                                .padding(vertical = 16.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
                                                 text = "暂无规则",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = colors.textSecondary
                                             )
                                         }
                                     } else {
                                         groupRules.forEach { rule ->
-                                            Divider(
-                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
-                                                thickness = 0.5.dp
-                                            )
+                                            MiuixHairlineDivider(insetStart = 14.dp, insetEnd = 14.dp)
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                                    .padding(horizontal = 14.dp, vertical = 8.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
-                                                // Target -> Replacement Badge Box (comfortably spacious)
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     modifier = Modifier.weight(1f)
                                                 ) {
                                                     Box(
                                                         modifier = Modifier
-                                                            .background(
-                                                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-                                                                RoundedCornerShape(4.dp)
-                                                            )
-                                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                                            .clip(RoundedCornerShape(7.dp))
+                                                            .background(colors.primaryContainer)
+                                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                                     ) {
                                                         Text(
                                                             text = rule.target,
-                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            style = MaterialTheme.typography.bodySmall,
                                                             fontFamily = FontFamily.Monospace,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.onSurface
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = colors.onPrimaryContainer
                                                         )
                                                     }
 
                                                     Spacer(modifier = Modifier.width(6.dp))
 
                                                     Icon(
-                                                        imageVector = Icons.Outlined.ArrowForward,
+                                                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                                                         contentDescription = "替换为",
-                                                        tint = MaterialTheme.colorScheme.onSurface,
-                                                        modifier = Modifier.size(12.dp)
+                                                        tint = colors.textTertiary,
+                                                        modifier = Modifier.size(13.dp)
                                                     )
 
                                                     Spacer(modifier = Modifier.width(6.dp))
 
                                                     Box(
                                                         modifier = Modifier
-                                                            .background(
-                                                                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f),
-                                                                RoundedCornerShape(4.dp)
-                                                            )
-                                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                                            .clip(RoundedCornerShape(7.dp))
+                                                            .background(colors.successContainer)
+                                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                                     ) {
                                                         Text(
                                                             text = rule.replacement,
-                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            style = MaterialTheme.typography.bodySmall,
                                                             fontFamily = FontFamily.Monospace,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.onSurface
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = colors.success
                                                         )
                                                     }
                                                 }
 
-                                                // Individual Rule toggle switches & actions
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                 ) {
-                                                    Switch(
+                                                    MiuixSwitch(
                                                         checked = rule.isEnabled,
                                                         onCheckedChange = { viewModel.toggleRuleEnabled(rule) },
-                                                        modifier = Modifier.scale(0.8f)
+                                                        modifier = Modifier.scale(0.82f)
                                                     )
 
                                                     IconButton(
@@ -527,24 +514,22 @@ fun RulesScreen(
                                                         modifier = Modifier.size(32.dp)
                                                     ) {
                                                         Icon(
-                                                            imageVector = Icons.Outlined.Edit,
+                                                            imageVector = Icons.Rounded.Edit,
                                                             contentDescription = "编辑规则",
-                                                            tint = MaterialTheme.colorScheme.onSurface,
+                                                            tint = colors.textSecondary,
                                                             modifier = Modifier.size(16.dp)
                                                         )
                                                     }
 
                                                     IconButton(
-                                                        onClick = {
-                                                            viewModel.deleteRule(rule.id)
-                                                        },
+                                                        onClick = { viewModel.deleteRule(rule.id) },
                                                         modifier = Modifier.size(32.dp)
                                                     ) {
                                                         Icon(
-                                                            imageVector = Icons.Outlined.Delete,
+                                                            imageVector = Icons.Rounded.DeleteOutline,
                                                             contentDescription = "删除规则",
-                                                            tint = MaterialTheme.colorScheme.error,
-                                                            modifier = Modifier.size(16.dp)
+                                                            tint = colors.error,
+                                                            modifier = Modifier.size(17.dp)
                                                         )
                                                     }
                                                 }
@@ -562,48 +547,48 @@ fun RulesScreen(
 
     // Dialog: Add / Edit Group
     if (showGroupDialog) {
-        AlertDialog(
+        MiuixDialog(
             onDismissRequest = { showGroupDialog = false },
-            title = {
-                Text(
-                    text = if (editingGroup == null) "添加规则分组" else "修改规则分组",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
+            title = if (editingGroup == null) "新建分组" else "编辑分组",
+            content = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    OutlinedTextField(
+                    MiuixTextField(
                         value = groupNameInput,
                         onValueChange = { groupNameInput = it },
-                        label = { Text("分组名称") },
-                        placeholder = { Text("如：重-虫") },
-                        modifier = Modifier.fillMaxWidth().testTag("group_name_input"),
+                        label = "分组名",
+                        placeholder = "如：重-虫",
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.testTag("group_name_input")
                     )
 
-                    OutlinedTextField(
+                    MiuixTextField(
                         value = groupReplacementInput,
                         onValueChange = { groupReplacementInput = it },
-                        label = { Text("替代词/字 (可选)") },
-                        placeholder = { Text("如：虫") },
-                        modifier = Modifier.fillMaxWidth().testTag("group_replacement_input"),
+                        label = "替代词（可选）",
+                        placeholder = "如：虫",
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.testTag("group_replacement_input")
                     )
                 }
             },
-            confirmButton = {
-                Button(
+            buttons = {
+                MiuixActionButton(
+                    text = "取消",
+                    onClick = { showGroupDialog = false },
+                    variant = MiuixButtonVariant.Secondary,
+                    modifier = Modifier.weight(1f)
+                )
+                MiuixActionButton(
+                    text = "保存",
                     onClick = {
                         val name = groupNameInput.trim()
                         val replacement = groupReplacementInput.trim()
                         if (name.isEmpty()) {
                             Toast.makeText(context, "分组字不能为空", Toast.LENGTH_SHORT).show()
-                            return@Button
+                            return@MiuixActionButton
                         }
 
                         val group = editingGroup
@@ -614,16 +599,11 @@ fun RulesScreen(
                         }
                         showGroupDialog = false
                     },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.testTag("save_group_button")
-                ) {
-                    Text("保存")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showGroupDialog = false }) {
-                    Text("取消")
-                }
+                    variant = MiuixButtonVariant.Primary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("save_group_button")
+                )
             }
         )
     }
@@ -637,7 +617,6 @@ fun RulesScreen(
             extractGroupMapping(currentGroupForRule)
         }
 
-        // 实时检测是否重复输入
         val trimmedTarget = ruleTargetInput.trim()
         val currentEditingRule = editingRule
         val duplicateRule = remember(trimmedTarget, rulesList, currentEditingRule) {
@@ -645,70 +624,56 @@ fun RulesScreen(
             else {
                 rulesList.firstOrNull { rule ->
                     (currentEditingRule == null || rule.id != currentEditingRule.id) &&
-                    rule.target.trim().equals(trimmedTarget, ignoreCase = true)
+                        rule.target.trim().equals(trimmedTarget, ignoreCase = true)
                 }
             }
         }
         val duplicateGroupName = remember(duplicateRule, ruleGroupsList) {
             duplicateRule?.let { rule ->
                 val g = ruleGroupsList.firstOrNull { it.id == rule.groupId }
-                if (g != null) {
-                    formatGroupTitle(g)
-                } else {
-                    "默认分组"
-                }
+                if (g != null) formatGroupTitle(g) else "默认分组"
             } ?: ""
         }
 
-        AlertDialog(
+        MiuixDialog(
             onDismissRequest = { showRuleDialog = false },
-            title = {
-                Text(
-                    text = if (editingRule == null) "添加发音规则" else "修改发音规则",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
+            title = if (editingRule == null) "添加发音规则" else "修改发音规则",
+            content = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // 所属分组提示
                     if (currentGroupForRule != null) {
                         val groupTitle = formatGroupTitle(currentGroupForRule)
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.fillMaxWidth()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(colors.primaryContainer.copy(alpha = 0.7f))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Folder,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "分组: $groupTitle",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.Folder,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "分组: $groupTitle",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.onPrimaryContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
 
-                    // 匹配词输入框
-                    OutlinedTextField(
+                    MiuixTextField(
                         value = ruleTargetInput,
                         onValueChange = { newTarget ->
                             ruleTargetInput = newTarget
-                            // 当输入匹配词时，若属于具有映射的分组（如重-虫），且替换词未被手动修改，则自动补齐
                             if (groupMapping != null && !userModifiedReplacement) {
                                 val smartRepl = computeSmartReplacement(newTarget, groupMapping)
                                 if (smartRepl != null) {
@@ -718,84 +683,82 @@ fun RulesScreen(
                                 }
                             }
                         },
-                        label = { Text("匹配词") },
-                        placeholder = { Text("如：一重") },
+                        label = "匹配词",
+                        placeholder = "如：一重",
                         isError = duplicateRule != null,
-                        modifier = Modifier.fillMaxWidth().testTag("rule_target_input"),
+                        singleLine = false,
                         minLines = 2,
-                        maxLines = 5,
-                        shape = RoundedCornerShape(12.dp)
+                        maxLines = 4,
+                        modifier = Modifier.testTag("rule_target_input")
                     )
 
-                    // 重复输入警告提示
                     AnimatedVisibility(visible = duplicateRule != null) {
                         duplicateRule?.let { dup ->
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(colors.errorContainer)
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Warning,
-                                        contentDescription = "重复警告",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "「${dup.target}」已在「$duplicateGroupName」中存在",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.WarningAmber,
+                                    contentDescription = "重复警告",
+                                    tint = colors.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "「${dup.target}」已在「$duplicateGroupName」中存在",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.error
+                                )
                             }
                         }
                     }
 
-                    // 替换为输入框
-                    OutlinedTextField(
+                    MiuixTextField(
                         value = ruleReplacementInput,
                         onValueChange = { newRepl ->
                             ruleReplacementInput = newRepl
                             userModifiedReplacement = newRepl.isNotBlank()
                         },
-                        label = { Text("替换为") },
-                        placeholder = { Text("如：一虫") },
+                        label = "替换为",
+                        placeholder = "如：一虫",
+                        singleLine = true,
                         trailingIcon = {
                             val smartRepl = if (groupMapping != null && ruleTargetInput.isNotBlank()) {
                                 computeSmartReplacement(ruleTargetInput, groupMapping)
                             } else null
 
                             if (smartRepl != null) {
-                                IconButton(
-                                    onClick = {
-                                        ruleReplacementInput = smartRepl
-                                        userModifiedReplacement = false
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.AutoFixHigh,
-                                        contentDescription = "自动补齐",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.AutoFixHigh,
+                                    contentDescription = "自动补齐",
+                                    tint = colors.primary,
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clickable {
+                                            ruleReplacementInput = smartRepl
+                                            userModifiedReplacement = false
+                                        }
+                                )
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().testTag("rule_replacement_input"),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.testTag("rule_replacement_input")
                     )
                 }
             },
-            confirmButton = {
-                Button(
+            buttons = {
+                MiuixActionButton(
+                    text = "取消",
+                    onClick = { showRuleDialog = false },
+                    variant = MiuixButtonVariant.Secondary,
+                    modifier = Modifier.weight(1f)
+                )
+                MiuixActionButton(
+                    text = "保存",
                     onClick = {
                         val target = ruleTargetInput.trim()
                         val replacement = ruleReplacementInput.trim()
@@ -803,21 +766,23 @@ fun RulesScreen(
 
                         if (target.isEmpty() || replacement.isEmpty()) {
                             Toast.makeText(context, "输入不能为空", Toast.LENGTH_SHORT).show()
-                            return@Button
+                            return@MiuixActionButton
                         }
 
-                        // 重复输入拦截提示
                         if (duplicateRule != null) {
-                            Toast.makeText(context, "匹配词「$target」已在「$duplicateGroupName」中存在，请勿重复添加！", Toast.LENGTH_LONG).show()
-                            return@Button
+                            Toast.makeText(
+                                context,
+                                "匹配词「$target」已在「$duplicateGroupName」中存在，请勿重复添加！",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            return@MiuixActionButton
                         }
 
-                        // Verify valid regex
                         try {
                             Regex(target)
                         } catch (e: Exception) {
                             Toast.makeText(context, "正则表达式无效: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                            return@Button
+                            return@MiuixActionButton
                         }
 
                         val rule = editingRule
@@ -841,109 +806,77 @@ fun RulesScreen(
                         showRuleDialog = false
                     },
                     enabled = duplicateRule == null,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.testTag("save_rule_button")
-                ) {
-                    Text("保存")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRuleDialog = false }) {
-                    Text("取消")
-                }
+                    variant = MiuixButtonVariant.Primary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("save_rule_button")
+                )
             }
         )
     }
 
     // Dialog: Confirm Clear All Rules
     if (showClearAllConfirmDialog) {
-        AlertDialog(
+        MiuixDialog(
             onDismissRequest = { showClearAllConfirmDialog = false },
-            title = {
+            title = "清空规则",
+            content = {
                 Text(
-                    text = "确认清空",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    text = "确定要清空所有发音规则和分组吗？此操作无法撤销。",
+                    text = "确定清空所有分组与规则？不可撤销。",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = colors.textSecondary
                 )
             },
-            confirmButton = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 左侧：确认按钮（警示色，改名为确认，移到左边防止误触）
-                    Button(
-                        onClick = {
-                            viewModel.clearAllRules()
-                            showClearAllConfirmDialog = false
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("确认")
-                    }
-
-                    // 右侧：取消按钮（安全选项，移到右边）
-                    Button(
-                        onClick = { showClearAllConfirmDialog = false },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("取消")
-                    }
-                }
+            buttons = {
+                // 左侧：确认按钮（警示色，防止误触）
+                MiuixActionButton(
+                    text = "确认",
+                    onClick = {
+                        viewModel.clearAllRules()
+                        showClearAllConfirmDialog = false
+                    },
+                    variant = MiuixButtonVariant.Destructive,
+                    modifier = Modifier.weight(1f)
+                )
+                // 右侧：取消按钮（安全选项）
+                MiuixActionButton(
+                    text = "取消",
+                    onClick = { showClearAllConfirmDialog = false },
+                    variant = MiuixButtonVariant.Primary,
+                    modifier = Modifier.weight(1f)
+                )
             }
         )
     }
 
     // Dialog: Confirm Reset Default Rules
     if (showResetDefaultConfirmDialog) {
-        AlertDialog(
+        MiuixDialog(
             onDismissRequest = { showResetDefaultConfirmDialog = false },
-            title = {
+            title = "恢复默认",
+            content = {
                 Text(
-                    text = "恢复默认规则",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    text = "确定要恢复默认规则吗？原有规则将被覆盖。",
+                    text = "原有规则将被默认模板覆盖。",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = colors.textSecondary
                 )
             },
-            confirmButton = {
-                Button(
+            buttons = {
+                MiuixActionButton(
+                    text = "取消",
+                    onClick = { showResetDefaultConfirmDialog = false },
+                    variant = MiuixButtonVariant.Secondary,
+                    modifier = Modifier.weight(1f)
+                )
+                MiuixActionButton(
+                    text = "恢复",
                     onClick = {
                         viewModel.resetToDefaultTemplate()
                         showResetDefaultConfirmDialog = false
                     },
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("恢复")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showResetDefaultConfirmDialog = false },
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("取消")
-                }
+                    variant = MiuixButtonVariant.Primary,
+                    modifier = Modifier.weight(1f)
+                )
             }
         )
     }
@@ -966,16 +899,12 @@ internal fun formatGroupTitle(group: RuleGroupEntity): String {
 
 /**
  * 从规则分组中提取「源字符/词」到「替换字符/词」的映射对
- * 常见命名习惯支持：
- * 1. 组名含连接符：如 "重-虫"、"长—尝"、"长-尝"、"长->尝"、"长→尝"、"长/尝"、"长:尝"、"长：尝"、"长~尝"、"长～尝"、"长转尝"
- * 2. 组名填写原字/词（如 "重" 或 "长"），替代音字字段填写（如 "虫" 或 "尝"）
  */
 internal fun extractGroupMapping(group: RuleGroupEntity?): Pair<String, String>? {
     if (group == null) return null
     val rawName = group.name.trim()
     val rawRepl = group.replacement.trim()
 
-    // 1. 尝试从 group.name 解析分隔符（例如：重-虫、长—尝、长-尝、长->尝、长→尝、长/尝、长:尝、长：尝、长转尝、长~尝等）
     val splitRegex = Regex("""[—―–\-\->→:：/～~转]+""")
     val parts = rawName.split(splitRegex).map { it.trim() }.filter { it.isNotEmpty() }
     if (parts.size >= 2) {
@@ -984,7 +913,6 @@ internal fun extractGroupMapping(group: RuleGroupEntity?): Pair<String, String>?
         return Pair(src, dst)
     }
 
-    // 2. 如果 group.name 为源字/词，group.replacement 为目标字/词
     if (rawName.isNotEmpty() && rawRepl.isNotEmpty()) {
         return Pair(rawName, rawRepl)
     }
@@ -993,18 +921,14 @@ internal fun extractGroupMapping(group: RuleGroupEntity?): Pair<String, String>?
 }
 
 /**
- * 智能推导替换词：
- * 1. 完整包含源词：例如 分组为 一重-一虫，输入 一重 -> 一虫；输入 一重山 -> 一虫山；或者 长-尝，输入 长相厮守 -> 尝相厮守
- * 2. 词语组核心多音字推导：例如 分组为 一重-一虫，输入 两重、九重天、双重 时，自动发现核心字变化 重->虫，替换为 两虫、九虫天、双虫
+ * 智能推导替换词
  */
 internal fun computeSmartReplacement(target: String, groupMapping: Pair<String, String>?): String? {
     if (groupMapping == null || target.isBlank()) return null
     val (src, dst) = groupMapping
-    // 1. 目标词包含完整的 src 词语
     if (target.contains(src)) {
         return target.replace(src, dst)
     }
-    // 2. 若 src 与 dst 等长且大于1字（如 一重 与 一虫），检测其单字差异
     if (src.length == dst.length && src.length > 1) {
         val diffIndices = src.indices.filter { src[it] != dst[it] }
         if (diffIndices.size == 1) {

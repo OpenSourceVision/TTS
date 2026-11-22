@@ -9,30 +9,33 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.outlined.List
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.outlined.Subject
+import androidx.compose.material.icons.automirrored.rounded.Subject
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.example.data.AppDatabase
 import com.example.service.TtsServerService
@@ -40,12 +43,15 @@ import com.example.ui.DashboardScreen
 import com.example.ui.LogsScreen
 import com.example.ui.RulesScreen
 import com.example.ui.SettingsScreen
+import com.example.ui.miuix.MiuixNavigationBar
+import com.example.ui.miuix.MiuixNavigationItem
+import com.example.ui.theme.MiuixTheme
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.TtsViewModel
 import com.example.viewmodel.TtsViewModelFactory
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
@@ -105,93 +111,84 @@ fun MainApp(
     }
 
     MyApplicationTheme(
-        darkTheme = darkTheme,
-        dynamicColor = settings.useDynamicColor
+        darkTheme = darkTheme
     ) {
-        // Keep track of navigation history as a back-stack list of tab indices.
         var navigationStack by remember { mutableStateOf(listOf(initialTab)) }
         val selectedTab = navigationStack.last()
 
-        // Intercept back gesture (swipe-back) if we are not on the first screen.
         BackHandler(enabled = navigationStack.size > 1) {
             navigationStack = navigationStack.dropLast(1)
         }
 
         fun navigateToTab(tab: Int) {
             if (selectedTab != tab) {
-                // Remove previous occurrence if any, and append the new tab to the top of backstack
                 navigationStack = navigationStack.filter { it != tab } + tab
             }
         }
 
         Scaffold(
             modifier = Modifier.fillMaxSize(),
+            containerColor = MiuixTheme.colors.background,
+            contentWindowInsets = WindowInsets.statusBars,
             bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(
+                MiuixNavigationBar {
+                    MiuixNavigationItem(
                         selected = selectedTab == 0,
                         onClick = { navigateToTab(0) },
-                        icon = {
-                            Icon(
-                                imageVector = if (selectedTab == 0) Icons.Filled.Home else Icons.Outlined.Home,
-                                contentDescription = "主页"
-                            )
-                        },
-                        label = { Text("主页") }
+                        icon = Icons.Outlined.Home,
+                        selectedIcon = Icons.Rounded.Home,
+                        label = "主页"
                     )
-                    NavigationBarItem(
+                    MiuixNavigationItem(
                         selected = selectedTab == 1,
                         onClick = { navigateToTab(1) },
-                        icon = {
-                            Icon(
-                                imageVector = if (selectedTab == 1) Icons.AutoMirrored.Filled.List else Icons.AutoMirrored.Outlined.List,
-                                contentDescription = "日志"
-                            )
-                        },
-                        label = { Text("日志") }
+                        icon = Icons.AutoMirrored.Outlined.Subject,
+                        selectedIcon = Icons.AutoMirrored.Rounded.Subject,
+                        label = "日志"
                     )
-                    NavigationBarItem(
+                    MiuixNavigationItem(
                         selected = selectedTab == 2,
                         onClick = { navigateToTab(2) },
-                        icon = {
-                            Icon(
-                                imageVector = if (selectedTab == 2) Icons.Filled.Edit else Icons.Outlined.Edit,
-                                contentDescription = "规则"
-                            )
-                        },
-                        label = { Text("规则") }
+                        icon = Icons.Outlined.Tune,
+                        selectedIcon = Icons.Rounded.Tune,
+                        label = "规则"
                     )
-                    NavigationBarItem(
+                    MiuixNavigationItem(
                         selected = selectedTab == 3,
                         onClick = { navigateToTab(3) },
-                        icon = {
-                            Icon(
-                                imageVector = if (selectedTab == 3) Icons.Filled.Settings else Icons.Outlined.Settings,
-                                contentDescription = "设置"
-                            )
-                        },
-                        label = { Text("设置") }
+                        icon = Icons.Outlined.Settings,
+                        selectedIcon = Icons.Rounded.Settings,
+                        label = "设置"
                     )
                 }
             }
         ) { innerPadding ->
-            when (selectedTab) {
-                0 -> DashboardScreen(
-                    viewModel = viewModel,
-                    modifier = Modifier.padding(innerPadding)
-                )
-                1 -> LogsScreen(
-                    viewModel = viewModel,
-                    modifier = Modifier.padding(innerPadding)
-                )
-                2 -> RulesScreen(
-                    viewModel = viewModel,
-                    modifier = Modifier.padding(innerPadding)
-                )
-                3 -> SettingsScreen(
-                    viewModel = viewModel,
-                    modifier = Modifier.padding(innerPadding)
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MiuixTheme.colors.background)
+                    .padding(innerPadding),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                val contentModifier = Modifier.widthIn(max = 760.dp)
+                when (selectedTab) {
+                    0 -> DashboardScreen(
+                        viewModel = viewModel,
+                        modifier = contentModifier
+                    )
+                    1 -> LogsScreen(
+                        viewModel = viewModel,
+                        modifier = contentModifier
+                    )
+                    2 -> RulesScreen(
+                        viewModel = viewModel,
+                        modifier = contentModifier
+                    )
+                    3 -> SettingsScreen(
+                        viewModel = viewModel,
+                        modifier = contentModifier
+                    )
+                }
             }
         }
     }
