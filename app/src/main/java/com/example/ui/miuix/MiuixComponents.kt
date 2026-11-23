@@ -347,7 +347,7 @@ fun MiuixSuperArrowRow(
             if (!endValue.isNullOrBlank()) {
                 Text(
                     text = endValue,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = colors.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -484,7 +484,7 @@ fun MiuixActionButton(
             disabledContainerColor = containerColor.copy(alpha = 0.45f),
             disabledContentColor = contentColor.copy(alpha = 0.55f)
         ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
         modifier = modifier.heightIn(min = height)
     ) {
         if (icon != null) {
@@ -575,8 +575,8 @@ fun MiuixTextField(
             maxLines = maxLines,
             textStyle = TextStyle(
                 color = colors.textPrimary,
-                fontSize = 15.sp,
-                lineHeight = 21.sp,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
                 fontWeight = FontWeight.Normal
             ),
             cursorBrush = SolidColor(colors.primary),
@@ -657,7 +657,8 @@ fun MiuixSearchBar(
         singleLine = true,
         textStyle = TextStyle(
             color = colors.textPrimary,
-            fontSize = 15.sp,
+            fontSize = 16.sp,
+            lineHeight = 22.sp,
             fontWeight = FontWeight.Normal
         ),
         cursorBrush = SolidColor(colors.primary),
@@ -1034,8 +1035,6 @@ fun MiuixBentoMetricCard(
             Text(
                 text = value,
                 style = MaterialTheme.typography.headlineMedium,
-                fontSize = 24.sp,
-                lineHeight = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.textPrimary,
                 maxLines = 1,

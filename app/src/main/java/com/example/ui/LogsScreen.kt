@@ -30,8 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -56,8 +54,6 @@ import com.example.ui.miuix.MiuixActionButton
 import com.example.ui.miuix.MiuixButtonVariant
 import com.example.ui.miuix.MiuixCard
 import com.example.ui.miuix.MiuixDialog
-import com.example.ui.miuix.MiuixDropdownMenu
-import com.example.ui.miuix.MiuixDropdownMenuItem
 import com.example.ui.miuix.MiuixHairlineDivider
 import com.example.ui.miuix.MiuixIconButton
 import com.example.ui.miuix.MiuixLargeHeader
@@ -78,7 +74,6 @@ fun LogsScreen(
     val colors = MiuixTheme.colors
 
     var selectedLogForDetail by remember { mutableStateOf<HistoryEntity?>(null) }
-    var showOverflowMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(history) {
         if (history.isNotEmpty()) {
@@ -103,40 +98,6 @@ fun LogsScreen(
                         tint = colors.error,
                         modifier = Modifier.testTag("clear_history_log_page_button")
                     )
-                }
-
-                Box {
-                    MiuixIconButton(
-                        onClick = { showOverflowMenu = true },
-                        icon = Icons.Rounded.MoreHoriz,
-                        contentDescription = "更多",
-                        tint = colors.textPrimary,
-                        modifier = Modifier.testTag("overflow_menu_button")
-                    )
-
-                    MiuixDropdownMenu(
-                        expanded = showOverflowMenu,
-                        onDismissRequest = { showOverflowMenu = false }
-                    ) {
-                        MiuixDropdownMenuItem(
-                            text = "复制日志",
-                            leadingIcon = Icons.Rounded.ContentCopy,
-                            onClick = {
-                                showOverflowMenu = false
-                                viewModel.copyLogsToClipboard(context)
-                            },
-                            modifier = Modifier.testTag("copy_logs_menu_item")
-                        )
-                        MiuixDropdownMenuItem(
-                            text = "导出日志",
-                            leadingIcon = Icons.Rounded.Share,
-                            onClick = {
-                                showOverflowMenu = false
-                                viewModel.shareLogReport(context)
-                            },
-                            modifier = Modifier.testTag("export_logs_menu_item")
-                        )
-                    }
                 }
             }
         )

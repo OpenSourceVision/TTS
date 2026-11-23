@@ -10,16 +10,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -54,7 +57,6 @@ import com.example.ui.miuix.MiuixDialog
 import com.example.ui.miuix.MiuixDropdownMenu
 import com.example.ui.miuix.MiuixDropdownMenuItem
 import com.example.ui.miuix.MiuixHairlineDivider
-import com.example.ui.miuix.MiuixIconButton
 import com.example.ui.miuix.MiuixLargeHeader
 import com.example.ui.miuix.MiuixSmallTitle
 import com.example.ui.miuix.MiuixSuperArrowRow
@@ -331,7 +333,7 @@ fun SettingsScreen(
         MiuixCard {
             MiuixSuperArrowRow(
                 title = "WebDAV",
-                endValue = if (settings.webdavUrl.isBlank()) "未配置" else "配置",
+                endValue = if (settings.webdavUrl.isBlank()) "未配置" else "已配置",
                 onClick = { showWebdavConfigDialog = true },
                 modifier = Modifier.testTag("webdav_config_trigger")
             )
@@ -341,67 +343,100 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    .height(56.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 var syncingBackup by remember { mutableStateOf(false) }
                 var syncingRestore by remember { mutableStateOf(false) }
 
-                MiuixActionButton(
-                    text = if (syncingBackup) "备份中..." else "备份",
-                    onClick = {
-                        if (settings.webdavUrl.isBlank()) {
-                            Toast.makeText(context, "请先配置 WebDAV", Toast.LENGTH_SHORT).show()
-                            showWebdavConfigDialog = true
-                            return@MiuixActionButton
-                        }
-                        syncingBackup = true
-                        viewModel.backupToWebDav { result ->
-                            syncingBackup = false
-                            if (!result.isSuccess) {
-                                Toast.makeText(
-                                    context,
-                                    "备份失败: ${result.exceptionOrNull()?.localizedMessage}",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    },
-                    enabled = !syncingBackup,
-                    variant = MiuixButtonVariant.TonalPrimary,
-                    height = 42.dp,
+                Row(
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("webdav_backup_now_button")
+                        .fillMaxHeight()
+                        .clickable(enabled = !syncingBackup) {
+                            if (settings.webdavUrl.isBlank()) {
+                                Toast.makeText(context, "请先配置 WebDAV", Toast.LENGTH_SHORT).show()
+                                showWebdavConfigDialog = true
+                                return@clickable
+                            }
+                            syncingBackup = true
+                            viewModel.backupToWebDav { result ->
+                                syncingBackup = false
+                                if (!result.isSuccess) {
+                                    Toast.makeText(
+                                        context,
+                                        "备份失败: ${result.exceptionOrNull()?.localizedMessage}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
+                        .testTag("webdav_backup_now_button"),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CloudUpload,
+                        contentDescription = null,
+                        tint = if (syncingBackup) colors.textTertiary else colors.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (syncingBackup) "备份中..." else "备份",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (syncingBackup) colors.textTertiary else colors.primary
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .width(0.5.dp)
+                        .height(22.dp)
+                        .background(colors.divider)
                 )
 
-                MiuixActionButton(
-                    text = if (syncingRestore) "恢复中..." else "恢复",
-                    onClick = {
-                        if (settings.webdavUrl.isBlank()) {
-                            Toast.makeText(context, "请先配置 WebDAV", Toast.LENGTH_SHORT).show()
-                            showWebdavConfigDialog = true
-                            return@MiuixActionButton
-                        }
-                        syncingRestore = true
-                        viewModel.restoreFromWebDav { result ->
-                            syncingRestore = false
-                            if (!result.isSuccess) {
-                                Toast.makeText(
-                                    context,
-                                    "恢复失败: ${result.exceptionOrNull()?.localizedMessage}",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    },
-                    enabled = !syncingRestore,
-                    variant = MiuixButtonVariant.Secondary,
-                    height = 42.dp,
+                Row(
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("webdav_restore_now_button")
-                )
+                        .fillMaxHeight()
+                        .clickable(enabled = !syncingRestore) {
+                            if (settings.webdavUrl.isBlank()) {
+                                Toast.makeText(context, "请先配置 WebDAV", Toast.LENGTH_SHORT).show()
+                                showWebdavConfigDialog = true
+                                return@clickable
+                            }
+                            syncingRestore = true
+                            viewModel.restoreFromWebDav { result ->
+                                syncingRestore = false
+                                if (!result.isSuccess) {
+                                    Toast.makeText(
+                                        context,
+                                        "恢复失败: ${result.exceptionOrNull()?.localizedMessage}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
+                        .testTag("webdav_restore_now_button"),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CloudDownload,
+                        contentDescription = null,
+                        tint = if (syncingRestore) colors.textTertiary else colors.textPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (syncingRestore) "恢复中..." else "恢复",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (syncingRestore) colors.textTertiary else colors.textPrimary
+                    )
+                }
             }
         }
 
