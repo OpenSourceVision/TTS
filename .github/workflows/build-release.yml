@@ -71,56 +71,56 @@ jobs:
             echo "No custom signing key found in secrets. Using fixed CI fallback keystore for consistent upgrades..."
             # Non-secret fixed CI fallback keystore (alias: upload, storepass/keypass: android)
             # Ensures GitHub Release builds always share the same signature without requiring external files.
-            cat <<'EOF' | tr -d '\n' | base64 -d > "${{ github.workspace }}/my-upload-key.jks"
-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
-/6FAgInEA==
-EOF
+            printf '%s' \
+              'MIIKpAIBAzCCCk4GCSqGSIb3DQEHAaCCCj8Eggo7MIIKNzCCBa4GCSqGSIb3DQEHAaCCBZ8EggWb' \
+              'MIIFlzCCBZMGCyqGSIb3DQEMCgECoIIFQDCCBTwwZgYJKoZIhvcNAQUNMFkwOAYJKoZIhvcNAQUM' \
+              'MCsEFGFJ7qWyOt6QzyS6QrPAHo2iWQiMAgInEAIBIDAMBggqhkiG9w0CCQUAMB0GCWCGSAFlAwQB' \
+              'KgQQKUN4wfNKfxtjxAa1nAjOPgSCBNBeSkDhD8aEbo6AsUP/WcL/oXe34uc+uVyckZt7q1VgDYg8' \
+              'rchJKUQWr3Ju5k6VRJQ0js3MwxIRWa51VwV0/m0rdAyvCrxn6uM7OYupRc7xfywaC37CbrlJlar9' \
+              'hOr/Tc70VP3oiD0Jy/Immme2mNZliDhM6RNgIRX6A6ECLVzuXbrRn0xvpelvtfy5TXUhzxpMQxcw' \
+              'Dqxcw0knzX39OvVeaqCrrgrrkeypVewCTEu8qNg8xMwNT51YlesMLVW7llA/tYNPNZ+or+cf+feJ' \
+              'ODHReyg0p8WB1mQx5pdQzzTyDC+okc7njUNrsNSn136JxWCtpMTkuhEJgBFM4ax844TSg37RKYIg' \
+              'NIVmcd7uomDvC0wMjjwVKpjctI7+ST2Z7+EbQJRbSWlMpLBQsvML6OhtpOcgKOPuX15mDlFn/HGS' \
+              'fBfu6giZgbI2KgsOexoL2OkQJQuftnplOTR1khB2g89yhXBENJUIJLJTcMz/HZOc6zz0Pov7covx' \
+              '/LtiMDbTcKZcd9yrED8dIZG7CyM0Fh80epjetBu+TwRpAk73GB346b9o1s5MiME3D/rZIoQkR69I' \
+              'LoxjNgXl/O9mJGIutBAUUVS5jaLvjq8CVYuFjGJ0UQVnX0pBDrRlMV91URvs8x8bad5ZiFg0X0Es' \
+              'Ws2ECbngWf90PPpgNFrtmRiYzcseBkZlHgDeszWa0qiYbbQh5RC6JHGPCHn7JYx8EBzCVBTNM5kr' \
+              'FtExZUrwHf5HKGim+QgiIy5KUamo+/xf9JSNog0hGH+om3q4/ss9GOVHoeJQEs1j78RfWb4b+suSc' \
+              'WMsjeClO0ZAc56xNyfENUvhFrs/fjCyideMMqRM2NNCUUrdteirAYlWDCefZCBreMT3rWU8Zs5v5f' \
+              'n5ziFknzOOvtwkRpMSjRFveB+qtU+3iP/IpRMyYBDkTlggVzqYmVcplK/WE++7avVi2oZ7sRrOlR6' \
+              'hK/+z8C4heS2Pf3XuvgTTKe6tmRy3POTA4C/Th7VqhXnb+12mySC5d4edVmR3xTOfxL5B87e5t9Pi' \
+              'p1rhpqg+1CxIZiKlmuwBPonT90cfdy/YNzzxgH1vf6diLg4eoUFm/7Cfr5zXCO/zzbQjHusk20vRP' \
+              'zP9lcMMU704xl1I2JXN3JPQ61s/lYQYZweZvxmRS/zpJqdsnMde0oKLd8fdT96aB9tAKBjaS/0RTg' \
+              '2u3+/w1R3h7bmAbgH2wZmZn+cabGUOGQECjC5b212vnG7cy0v+VDshrOb2GUFVxhyjtOXVUwXTMX' \
+              'S0QOvWmnmd8dcGFtqkR3383L2YF0ZVXw3TBP1LF3E+0BQEPQRIhMsi1FF6uKx5Mdci7zliByiP1YY' \
+              '/Ay3UXWnvYN2pPHsCUOISgPGJBLtGtdNR7sX14CAVhLFQySKuc0ArIdEPCgcpN4kyIzAW5vEZKl//' \
+              'LG6/bQWsWnf04bj+LUbFJ85ZGPbObz+z2Upb/9ZJQw/ggX06TKbRv4rgmJ2q6WT/UFqpIaSjFGH5' \
+              'neTThGxQuXHxKJnzHw8kAIfL+zBwH4MyfIS3r5m8i3hfdO+95eVJYXFlz/m2wfJpqsI9rUkN+LQlX' \
+              'cDch/Rbu5swpCRfisiZpQ5X/tT8pFSFZwiYWLYoNDKmFO+aZhRE6jRo/iXR0iMLN7aTdTFAMBsGCS' \
+              'qGSIb3DQEJFDEOHgwAdQBwAGwAbwBhAGQwIQYJKoZIhvcNAQkVMRQEElRpbWUgMTc5NTUyNjIxNTgz' \
+              'NDCCBIEGCSqGSIb3DQEHBqCCBHIwggRuAgEAMIIEZwYJKoZIhvcNAQcBMGYGCSqGSIb3DQEFDTBZMDgG' \
+              'CSqGSIb3DQEFDDArBBS0XFxdSaFu/uljOejKaETi01IVlAICJxACASAwDAYIKoZIhvcNAgkFADAdBglg' \
+              'hkgBZQMEASoEEEd2SEEXT0k0qKoWihET+NSAggPwxGKOBT7WWS2VaaOoRL6h1XdNPf+JdA7yr8Yc5n' \
+              '0LeKuG8jJCXgzlhMZYPRBMaTzPwvUXQwzqJbMbMd0Ju9AQwUgk7txBkMJ8hkuUeth6/ga3MpwPYyu/' \
+              'GJ3EQCv5roSjTXsJzI1+VaORif8Z6VXzIlF1FVewMfQL8gEYvOAI8HRiap8SgyVsmKsN6NAzFo9D+W' \
+              'nLfYv+hZ7QI7DhEUmwY1OaLPYiJ8TguChSD9DfOWvbA1NIzszqXu0lIceWJyJ7U48hhDDc61O/3+yp' \
+              'WsuS31ksGeEcUSme6jlv5oyc5U5AcMC1J7na6uoV2TdQE1qZv1zBiLKcL2Q1Jrp9iuPQtPWtyrTGG' \
+              'S6EgJudJd+tOCJ1EnxaSU9G+1vUHaOo/M58fwtmvynFlQTFoicHfAfEFT+V2QXrHLLboYl1LyEfXAz' \
+              'qQAHKSDhqeQTS2EWsyWb+iTCrmFFf60zt5hEIqVjevCR98YKZsp22UL9huPBN98jurkLuM4XbHuMNr' \
+              'WOwrKo6IXXYnkw2954U6CBnDbcAuR7p7jy5gV7gQkscxQP1qgPTkxudBu6a4zl5k2oUDewz81pL0Ij' \
+              'uVWffu719XdXZCAVIatBG8jpC6MKM7N0LtzsvdJrO5L8TSXZJ5ZcAgQw44rwjYCpekivdikHTO/pVK' \
+              'gX99iXiN6zDBlQyfYfh3rArapK3pmJrnRBWPlI2e+wdjIp+fOzr9r7aCEgExNhncf6eWfioqtk/Y180' \
+              '0xkMMAB03xyYHkWrmPuwhjfwFRdBRR0TmwbNjzry+RIWrlncYwDCwE4hLOWrktstcKct04HCzgfWwR' \
+              'LDKXqBeyyFJAGaD3GRd3FJlAmuXg/ono1KfD69phM65yMCbs+Tayz8aH5ME9+cM7q+JaclbeC+/7ls' \
+              'J8ysZEEvA4k8lQAcynQt/A2KGcZWdhA1Vm0P6/jnEPWb7mcYcpUL4Wolm+xZJyigSGeiCVwbaMuG75' \
+              'NcEETHIs35D5SP6ph4WImCDrWsOVt7Uvq3MQpOarFmdvUl/owDbb59Z2x1DD1ktreZKW4V6ds4Iigw' \
+              'hjO8+UjEpbx6VYgFMQ+TQSXEMjamuJdbJnz40eLpApjrI5ZFPyUU3hcgKSfvTKZEdkLBm7iclbjbr+' \
+              '0iHayxtS9lPrkSeulHa/4VM+1whtMQoSmHPiAAp61QPI7x914BfnKWc8mFBBZ/b85GoOsjLCtSH12S' \
+              'm1f6H/fYkQA3CTJXwU2d2+rnqN0tFn67JlN6YXGzu2tgZcSUrZVy1BfqY9DOkM+QvZGqz8bt6YoXGi' \
+              'Ar6iMZZA6Dlq+C8AZwgOGL5oPCdqJMBsraspvYb1PLXtq4uCV6XF7O71UYME0wMTANBglghkgBZQME' \
+              'AgEFAAQg0xwEknJY+2827DHVS8qNS0H5VY4VVavLx0sY/iRNNuAEFPwDsGCdQHvXpwPSqmn3M+uVw' \
+              '/6FAgInEA==' \
+              | base64 -d > "${{ github.workspace }}/my-upload-key.jks"
             echo "STORE_PASSWORD=android" >> $GITHUB_ENV
             echo "KEY_PASSWORD=android" >> $GITHUB_ENV
             echo "KEYSTORE_PATH=${{ github.workspace }}/my-upload-key.jks" >> $GITHUB_ENV
@@ -132,6 +132,7 @@ EOF
           STORE_PASSWORD: ${{ env.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
         run: |
+          grep -nE "isMinifyEnabled|isShrinkResources" app/build.gradle.kts || true
           gradle assembleRelease
 
       - name: Locate and Rename Build Artifacts
@@ -150,6 +151,7 @@ EOF
           cp "$UNIVERSAL_APK" "$NEW_NAME"
           
           echo "Renamed universal APK to: $NEW_NAME"
+          ls -lh "$NEW_NAME"
           
           echo "UNIVERSAL_APK_PATH=$NEW_NAME" >> $GITHUB_ENV
 
