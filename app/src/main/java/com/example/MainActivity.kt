@@ -9,7 +9,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -17,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Subject
 import androidx.compose.material.icons.automirrored.rounded.Subject
@@ -28,6 +33,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,17 +41,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import kotlin.math.abs
+import kotlin.math.absoluteValue
 import com.example.data.AppDatabase
 import com.example.service.TtsServerService
 import com.example.ui.DashboardScreen
 import com.example.ui.LogsScreen
 import com.example.ui.RulesScreen
 import com.example.ui.SettingsScreen
-import com.example.ui.miuix.MiuixNavigationBar
-import com.example.ui.miuix.MiuixNavigationItem
-import com.example.ui.theme.MiuixTheme
+import com.example.ui.coui.CouiNavigationBar
+import com.example.ui.coui.CouiNavigationItem
+import com.example.ui.theme.CouiTheme
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.TtsViewModel
 import com.example.viewmodel.TtsViewModelFactory
@@ -126,34 +135,75 @@ fun MainApp(
             }
         }
 
+        val pagerState = rememberPagerState(initialPage = initialTab, pageCount = { 4 })
+        val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
+        val dragPosition = if (isDragged) {
+            (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, 3f)
+        } else {
+            null
+        }
+        val couiEasing = remember { CubicBezierEasing(0.22f, 1f, 0.36f, 1f) }
+        var isProgrammaticScroll by remember { mutableStateOf(false) }
+
+        // Keep backstack synced only when user swipes horizontally
+        LaunchedEffect(pagerState.settledPage) {
+            val settled = pagerState.settledPage
+            if (!isProgrammaticScroll && selectedTab != settled) {
+                navigateToTab(settled)
+            }
+        }
+
+        // Smoothly glide pager when tab changes via bottom bar tap or BackHandler
+        LaunchedEffect(selectedTab) {
+            if (pagerState.currentPage != selectedTab) {
+                isProgrammaticScroll = true
+                try {
+                    if (abs(selectedTab - pagerState.currentPage) > 1) {
+                        val neighbor = if (selectedTab > pagerState.currentPage) selectedTab - 1 else selectedTab + 1
+                        pagerState.scrollToPage(neighbor)
+                    }
+                    pagerState.animateScrollToPage(
+                        page = selectedTab,
+                        animationSpec = tween(durationMillis = 300, easing = couiEasing)
+                    )
+                } finally {
+                    isProgrammaticScroll = false
+                }
+            }
+        }
+
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = MiuixTheme.colors.background,
+            containerColor = CouiTheme.colors.background,
             contentWindowInsets = WindowInsets.statusBars,
             bottomBar = {
-                MiuixNavigationBar {
-                    MiuixNavigationItem(
+                CouiNavigationBar(
+                    selectedIndex = selectedTab,
+                    itemCount = 4,
+                    dragPosition = dragPosition
+                ) {
+                    CouiNavigationItem(
                         selected = selectedTab == 0,
                         onClick = { navigateToTab(0) },
                         icon = Icons.Outlined.Home,
                         selectedIcon = Icons.Rounded.Home,
                         label = "主页"
                     )
-                    MiuixNavigationItem(
+                    CouiNavigationItem(
                         selected = selectedTab == 1,
                         onClick = { navigateToTab(1) },
                         icon = Icons.AutoMirrored.Outlined.Subject,
                         selectedIcon = Icons.AutoMirrored.Rounded.Subject,
                         label = "日志"
                     )
-                    MiuixNavigationItem(
+                    CouiNavigationItem(
                         selected = selectedTab == 2,
                         onClick = { navigateToTab(2) },
                         icon = Icons.Outlined.Tune,
                         selectedIcon = Icons.Rounded.Tune,
                         label = "规则"
                     )
-                    MiuixNavigationItem(
+                    CouiNavigationItem(
                         selected = selectedTab == 3,
                         onClick = { navigateToTab(3) },
                         icon = Icons.Outlined.Settings,
@@ -166,28 +216,55 @@ fun MainApp(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MiuixTheme.colors.background)
-                    .padding(innerPadding),
+                    .background(CouiTheme.colors.background)
+                    .padding(top = innerPadding.calculateTopPadding()),
                 contentAlignment = Alignment.TopCenter
             ) {
                 val contentModifier = Modifier.widthIn(max = 760.dp)
-                when (selectedTab) {
-                    0 -> DashboardScreen(
-                        viewModel = viewModel,
-                        modifier = contentModifier
-                    )
-                    1 -> LogsScreen(
-                        viewModel = viewModel,
-                        modifier = contentModifier
-                    )
-                    2 -> RulesScreen(
-                        viewModel = viewModel,
-                        modifier = contentModifier
-                    )
-                    3 -> SettingsScreen(
-                        viewModel = viewModel,
-                        modifier = contentModifier
-                    )
+                val bottomBarSpace = innerPadding.calculateBottomPadding()
+                HorizontalPager(
+                    state = pagerState,
+                    beyondViewportPageCount = 3,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
+                        .absoluteValue
+                        .coerceIn(0f, 1f)
+                    val activeProgress = 1f - pageOffset
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                val scale = 0.985f + 0.015f * activeProgress
+                                scaleX = scale
+                                scaleY = scale
+                                alpha = 0.65f + 0.35f * activeProgress
+                            },
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        when (page) {
+                            0 -> DashboardScreen(
+                                viewModel = viewModel,
+                                bottomPadding = bottomBarSpace,
+                                modifier = contentModifier
+                            )
+                            1 -> LogsScreen(
+                                viewModel = viewModel,
+                                bottomPadding = bottomBarSpace,
+                                modifier = contentModifier
+                            )
+                            2 -> RulesScreen(
+                                viewModel = viewModel,
+                                bottomPadding = bottomBarSpace,
+                                modifier = contentModifier
+                            )
+                            3 -> SettingsScreen(
+                                viewModel = viewModel,
+                                bottomPadding = bottomBarSpace,
+                                modifier = contentModifier
+                            )
+                        }
+                    }
                 }
             }
         }

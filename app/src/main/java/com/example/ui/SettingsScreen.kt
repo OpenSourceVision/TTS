@@ -45,24 +45,25 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
-import com.example.ui.miuix.MiuixActionButton
-import com.example.ui.miuix.MiuixButtonVariant
-import com.example.ui.miuix.MiuixCard
-import com.example.ui.miuix.MiuixDialog
-import com.example.ui.miuix.MiuixDropdownMenu
-import com.example.ui.miuix.MiuixDropdownMenuItem
-import com.example.ui.miuix.MiuixHairlineDivider
-import com.example.ui.miuix.MiuixLargeHeader
-import com.example.ui.miuix.MiuixSmallTitle
-import com.example.ui.miuix.MiuixSuperArrowRow
-import com.example.ui.miuix.MiuixSuperSwitchRow
-import com.example.ui.miuix.MiuixTextField
-import com.example.ui.theme.MiuixTheme
+import com.example.ui.coui.CouiActionButton
+import com.example.ui.coui.CouiButtonVariant
+import com.example.ui.coui.CouiCard
+import com.example.ui.coui.CouiDialog
+import com.example.ui.coui.CouiDropdownMenu
+import com.example.ui.coui.CouiDropdownMenuItem
+import com.example.ui.coui.CouiHairlineDivider
+import com.example.ui.coui.CouiLargeHeader
+import com.example.ui.coui.CouiRow
+import com.example.ui.coui.CouiSectionTitle
+import com.example.ui.coui.CouiSwitchRow
+import com.example.ui.coui.CouiTextField
+import com.example.ui.theme.CouiTheme
 import com.example.viewmodel.TtsViewModel
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
@@ -80,13 +81,14 @@ val languageOptions = listOf(
 @Composable
 fun SettingsScreen(
     viewModel: TtsViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomPadding: Dp = 0.dp
 ) {
     val settings by viewModel.settingsState.collectAsState()
     val scrollState = rememberScrollState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
 
     var webdavUrl by remember { mutableStateOf(settings.webdavUrl) }
     var webdavUsername by remember { mutableStateOf(settings.webdavUsername) }
@@ -108,9 +110,9 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(colors.background)
             .verticalScroll(scrollState)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        MiuixLargeHeader(
+        CouiLargeHeader(
             title = "设置",
             actions = {
                 Box(
@@ -139,9 +141,9 @@ fun SettingsScreen(
         )
 
         // 1. General
-        MiuixSmallTitle(text = "通用")
+        CouiSectionTitle(text = "通用")
 
-        MiuixCard {
+        CouiCard {
             var themeDropdownExpanded by remember { mutableStateOf(false) }
             val themeLabel = when (settings.themeMode) {
                 1 -> "浅色"
@@ -150,18 +152,18 @@ fun SettingsScreen(
             }
 
             Box(modifier = Modifier.fillMaxWidth()) {
-                MiuixSuperArrowRow(
+                CouiRow(
                     title = "主题",
                     endValue = themeLabel,
                     isDropdown = true,
                     onClick = { themeDropdownExpanded = true }
                 )
 
-                MiuixDropdownMenu(
+                CouiDropdownMenu(
                     expanded = themeDropdownExpanded,
                     onDismissRequest = { themeDropdownExpanded = false }
                 ) {
-                    MiuixDropdownMenuItem(
+                    CouiDropdownMenuItem(
                         text = "跟随系统",
                         selected = settings.themeMode == 0,
                         onClick = {
@@ -169,7 +171,7 @@ fun SettingsScreen(
                             themeDropdownExpanded = false
                         }
                     )
-                    MiuixDropdownMenuItem(
+                    CouiDropdownMenuItem(
                         text = "浅色",
                         selected = settings.themeMode == 1,
                         onClick = {
@@ -177,7 +179,7 @@ fun SettingsScreen(
                             themeDropdownExpanded = false
                         }
                     )
-                    MiuixDropdownMenuItem(
+                    CouiDropdownMenuItem(
                         text = "深色",
                         selected = settings.themeMode == 2,
                         onClick = {
@@ -188,7 +190,7 @@ fun SettingsScreen(
                 }
             }
 
-            MiuixHairlineDivider(insetStart = 16.dp)
+            CouiHairlineDivider(insetStart = 16.dp)
 
             var langDropdownExpanded by remember { mutableStateOf(false) }
             val currentOption = languageOptions.find {
@@ -197,19 +199,19 @@ fun SettingsScreen(
             } ?: LanguageOption("${settings.language} (${settings.country})", settings.language, settings.country)
 
             Box(modifier = Modifier.fillMaxWidth()) {
-                MiuixSuperArrowRow(
+                CouiRow(
                     title = "语言",
                     endValue = currentOption.label,
                     isDropdown = true,
                     onClick = { langDropdownExpanded = true }
                 )
 
-                MiuixDropdownMenu(
+                CouiDropdownMenu(
                     expanded = langDropdownExpanded,
                     onDismissRequest = { langDropdownExpanded = false }
                 ) {
                     languageOptions.forEach { option ->
-                        MiuixDropdownMenuItem(
+                        CouiDropdownMenuItem(
                             text = option.label,
                             selected = option.language == currentOption.language && option.country == currentOption.country,
                             onClick = {
@@ -225,7 +227,7 @@ fun SettingsScreen(
         }
 
         // 2. Background / Battery
-        MiuixSmallTitle(text = "后台")
+        CouiSectionTitle(text = "后台")
 
         var isBatteryOptimizing by remember { mutableStateOf(viewModel.isIgnoringBatteryOptimizations(context)) }
         val lifecycleOwner = LocalLifecycleOwner.current
@@ -241,8 +243,8 @@ fun SettingsScreen(
             }
         }
 
-        MiuixCard {
-            MiuixSuperSwitchRow(
+        CouiCard {
+            CouiSwitchRow(
                 title = "忽略电池优化",
                 checked = isBatteryOptimizing,
                 onCheckedChange = {
@@ -253,7 +255,7 @@ fun SettingsScreen(
         }
 
         // 3. Backup & Restore
-        MiuixSmallTitle(text = "备份")
+        CouiSectionTitle(text = "备份")
 
         val coroutineScope = rememberCoroutineScope()
 
@@ -305,8 +307,8 @@ fun SettingsScreen(
             }
         }
 
-        MiuixCard {
-            MiuixSuperArrowRow(
+        CouiCard {
+            CouiRow(
                 title = "本地备份",
                 endValue = "导出",
                 onClick = {
@@ -316,9 +318,9 @@ fun SettingsScreen(
                 modifier = Modifier.testTag("local_backup_button")
             )
 
-            MiuixHairlineDivider(insetStart = 16.dp)
+            CouiHairlineDivider(insetStart = 16.dp)
 
-            MiuixSuperArrowRow(
+            CouiRow(
                 title = "本地恢复",
                 endValue = "导入",
                 onClick = {
@@ -328,17 +330,17 @@ fun SettingsScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        MiuixCard {
-            MiuixSuperArrowRow(
+        CouiCard {
+            CouiRow(
                 title = "WebDAV",
                 endValue = if (settings.webdavUrl.isBlank()) "未配置" else "已配置",
                 onClick = { showWebdavConfigDialog = true },
                 modifier = Modifier.testTag("webdav_config_trigger")
             )
 
-            MiuixHairlineDivider(insetStart = 16.dp)
+            CouiHairlineDivider(insetStart = 16.dp)
 
             Row(
                 modifier = Modifier
@@ -441,7 +443,7 @@ fun SettingsScreen(
         }
 
         // 4. Version
-        MiuixSmallTitle(text = "关于")
+        CouiSectionTitle(text = "关于")
 
         val packageInfo = remember {
             try {
@@ -452,19 +454,19 @@ fun SettingsScreen(
         }
         val versionName = packageInfo?.versionName ?: "1.0.0"
 
-        MiuixCard {
-            MiuixSuperArrowRow(
+        CouiCard {
+            CouiRow(
                 title = "版本",
                 endValue = "v$versionName",
                 showArrow = false
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp + bottomPadding))
     }
 
     if (showWebdavConfigDialog) {
-        MiuixDialog(
+        CouiDialog(
             onDismissRequest = { showWebdavConfigDialog = false },
             title = "WebDAV",
             content = {
@@ -474,7 +476,7 @@ fun SettingsScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    MiuixTextField(
+                    CouiTextField(
                         value = webdavUrl,
                         onValueChange = { webdavUrl = it.trim() },
                         label = "服务器地址",
@@ -483,7 +485,7 @@ fun SettingsScreen(
                         modifier = Modifier.testTag("webdav_url_input")
                     )
 
-                    MiuixTextField(
+                    CouiTextField(
                         value = webdavUsername,
                         onValueChange = { webdavUsername = it.trim() },
                         label = "账号",
@@ -492,7 +494,7 @@ fun SettingsScreen(
                         modifier = Modifier.testTag("webdav_username_input")
                     )
 
-                    MiuixTextField(
+                    CouiTextField(
                         value = webdavPassword,
                         onValueChange = { webdavPassword = it.trim() },
                         label = "密码",
@@ -502,7 +504,7 @@ fun SettingsScreen(
                         modifier = Modifier.testTag("webdav_password_input")
                     )
 
-                    MiuixTextField(
+                    CouiTextField(
                         value = webdavDir,
                         onValueChange = { webdavDir = it.trim() },
                         label = "目录",
@@ -511,7 +513,7 @@ fun SettingsScreen(
                         modifier = Modifier.testTag("webdav_dir_input")
                     )
 
-                    MiuixTextField(
+                    CouiTextField(
                         value = webdavPath,
                         onValueChange = { webdavPath = it.trim() },
                         label = "文件名",
@@ -522,12 +524,12 @@ fun SettingsScreen(
 
                     var testingConnection by remember { mutableStateOf(false) }
 
-                    MiuixActionButton(
+                    CouiActionButton(
                         text = if (testingConnection) "测试中..." else "测试连接",
                         onClick = {
                             if (webdavUrl.isBlank()) {
                                 Toast.makeText(context, "请输入服务器地址", Toast.LENGTH_SHORT).show()
-                                return@MiuixActionButton
+                                return@CouiActionButton
                             }
                             testingConnection = true
                             viewModel.testWebDavConnection(webdavUrl, webdavUsername, webdavPassword, webdavDir) { result ->
@@ -544,7 +546,7 @@ fun SettingsScreen(
                             }
                         },
                         enabled = !testingConnection,
-                        variant = MiuixButtonVariant.TonalPrimary,
+                        variant = CouiButtonVariant.TonalPrimary,
                         height = 42.dp,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -553,15 +555,15 @@ fun SettingsScreen(
                 }
             },
             buttons = {
-                MiuixActionButton(
+                CouiActionButton(
                     text = "取消",
                     onClick = { showWebdavConfigDialog = false },
-                    variant = MiuixButtonVariant.Secondary,
+                    variant = CouiButtonVariant.Secondary,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("webdav_config_cancel")
                 )
-                MiuixActionButton(
+                CouiActionButton(
                     text = "保存",
                     onClick = {
                         viewModel.updateSettings(
@@ -576,7 +578,7 @@ fun SettingsScreen(
                         Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
                         showWebdavConfigDialog = false
                     },
-                    variant = MiuixButtonVariant.Primary,
+                    variant = CouiButtonVariant.Primary,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("webdav_save_button")

@@ -15,12 +15,13 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 @Immutable
-data class MiuixColorPalette(
+data class CouiColorPalette(
     val isDark: Boolean,
     val background: Color,
     val surface: Color,
     val surfaceSecondary: Color,
     val surfaceHighlight: Color,
+    val cardBorder: Color,
     val navBar: Color,
     val primary: Color,
     val onPrimary: Color,
@@ -39,109 +40,111 @@ data class MiuixColorPalette(
     val errorContainer: Color
 )
 
-private val LightMiuixPalette = MiuixColorPalette(
+private val LightCouiPalette = CouiColorPalette(
     isDark = false,
-    background = MiuixBackgroundLight,
-    surface = MiuixSurfaceLight,
-    surfaceSecondary = MiuixSurfaceVariantLight,
-    surfaceHighlight = MiuixSurfaceContainerHighLight,
-    navBar = MiuixNavBarLight,
-    primary = MiuixPrimaryLight,
+    background = CouiBackgroundLight,
+    surface = CouiSurfaceLight,
+    surfaceSecondary = CouiSurfaceVariantLight,
+    surfaceHighlight = CouiSurfaceContainerHighLight,
+    cardBorder = CouiCardBorderLight,
+    navBar = CouiNavBarLight,
+    primary = CouiPrimaryLight,
     onPrimary = Color.White,
-    primaryContainer = MiuixPrimaryContainerLight,
-    onPrimaryContainer = MiuixOnPrimaryContainerLight,
-    textPrimary = MiuixTextPrimaryLight,
-    textSecondary = MiuixTextSecondaryLight,
-    textTertiary = MiuixTextTertiaryLight,
-    divider = MiuixDividerLight,
-    switchTrackOff = MiuixSwitchTrackOffLight,
-    success = MiuixSuccess,
-    successContainer = MiuixSuccessContainerLight,
-    warning = MiuixWarning,
-    warningContainer = MiuixWarningContainerLight,
-    error = MiuixError,
-    errorContainer = MiuixErrorContainerLight
+    primaryContainer = CouiPrimaryContainerLight,
+    onPrimaryContainer = CouiOnPrimaryContainerLight,
+    textPrimary = CouiTextPrimaryLight,
+    textSecondary = CouiTextSecondaryLight,
+    textTertiary = CouiTextTertiaryLight,
+    divider = CouiDividerLight,
+    switchTrackOff = CouiSwitchTrackOffLight,
+    success = CouiSuccess,
+    successContainer = CouiSuccessContainerLight,
+    warning = CouiWarning,
+    warningContainer = CouiWarningContainerLight,
+    error = CouiError,
+    errorContainer = CouiErrorContainerLight
 )
 
-private val DarkMiuixPalette = MiuixColorPalette(
+private val DarkCouiPalette = CouiColorPalette(
     isDark = true,
-    background = MiuixBackgroundDark,
-    surface = MiuixSurfaceDark,
-    surfaceSecondary = MiuixSurfaceVariantDark,
-    surfaceHighlight = MiuixSurfaceContainerHighDark,
-    navBar = MiuixNavBarDark,
-    primary = MiuixPrimaryDark,
+    background = CouiBackgroundDark,
+    surface = CouiSurfaceDark,
+    surfaceSecondary = CouiSurfaceVariantDark,
+    surfaceHighlight = CouiSurfaceContainerHighDark,
+    cardBorder = CouiCardBorderDark,
+    navBar = CouiNavBarDark,
+    primary = CouiPrimaryDark,
     onPrimary = Color.White,
-    primaryContainer = MiuixPrimaryContainerDark,
-    onPrimaryContainer = MiuixOnPrimaryContainerDark,
-    textPrimary = MiuixTextPrimaryDark,
-    textSecondary = MiuixTextSecondaryDark,
-    textTertiary = MiuixTextTertiaryDark,
-    divider = MiuixDividerDark,
-    switchTrackOff = MiuixSwitchTrackOffDark,
-    success = MiuixSuccess,
-    successContainer = MiuixSuccessContainerDark,
-    warning = MiuixWarning,
-    warningContainer = MiuixWarningContainerDark,
-    error = MiuixError,
-    errorContainer = MiuixErrorContainerDark
+    primaryContainer = CouiPrimaryContainerDark,
+    onPrimaryContainer = CouiOnPrimaryContainerDark,
+    textPrimary = CouiTextPrimaryDark,
+    textSecondary = CouiTextSecondaryDark,
+    textTertiary = CouiTextTertiaryDark,
+    divider = CouiDividerDark,
+    switchTrackOff = CouiSwitchTrackOffDark,
+    success = CouiSuccess,
+    successContainer = CouiSuccessContainerDark,
+    warning = CouiWarning,
+    warningContainer = CouiWarningContainerDark,
+    error = CouiError,
+    errorContainer = CouiErrorContainerDark
 )
 
-val LocalMiuixColors = staticCompositionLocalOf { LightMiuixPalette }
+val LocalCouiColors = staticCompositionLocalOf { LightCouiPalette }
 
-object MiuixTheme {
-    val colors: MiuixColorPalette
-        @Composable get() = LocalMiuixColors.current
+object CouiTheme {
+    val colors: CouiColorPalette
+        @Composable get() = LocalCouiColors.current
 }
 
 private val DarkColorScheme = darkColorScheme(
-    primary = MiuixPrimaryDark,
-    secondary = MiuixPrimaryDark,
-    tertiary = MiuixSuccess,
-    background = MiuixBackgroundDark,
-    surface = MiuixSurfaceDark,
-    surfaceVariant = MiuixSurfaceVariantDark,
-    surfaceContainer = MiuixSurfaceDark,
-    surfaceContainerLow = MiuixSurfaceDark,
-    surfaceContainerHigh = MiuixSurfaceContainerHighDark,
-    primaryContainer = MiuixPrimaryContainerDark,
-    onPrimaryContainer = MiuixOnPrimaryContainerDark,
+    primary = CouiPrimaryDark,
+    secondary = CouiPrimaryDark,
+    tertiary = CouiSuccess,
+    background = CouiBackgroundDark,
+    surface = CouiSurfaceDark,
+    surfaceVariant = CouiSurfaceVariantDark,
+    surfaceContainer = CouiSurfaceDark,
+    surfaceContainerLow = CouiSurfaceDark,
+    surfaceContainerHigh = CouiSurfaceContainerHighDark,
+    primaryContainer = CouiPrimaryContainerDark,
+    onPrimaryContainer = CouiOnPrimaryContainerDark,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
-    onBackground = MiuixTextPrimaryDark,
-    onSurface = MiuixTextPrimaryDark,
-    onSurfaceVariant = MiuixTextSecondaryDark,
-    error = MiuixError,
-    errorContainer = MiuixErrorContainerDark,
-    onErrorContainer = MiuixError,
-    outline = MiuixDividerDark,
-    outlineVariant = MiuixDividerDark
+    onBackground = CouiTextPrimaryDark,
+    onSurface = CouiTextPrimaryDark,
+    onSurfaceVariant = CouiTextSecondaryDark,
+    error = CouiError,
+    errorContainer = CouiErrorContainerDark,
+    onErrorContainer = CouiError,
+    outline = CouiDividerDark,
+    outlineVariant = CouiDividerDark
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = MiuixPrimaryLight,
-    secondary = MiuixPrimaryLight,
-    tertiary = MiuixSuccess,
-    background = MiuixBackgroundLight,
-    surface = MiuixSurfaceLight,
-    surfaceVariant = MiuixSurfaceVariantLight,
-    surfaceContainer = MiuixSurfaceLight,
-    surfaceContainerLow = MiuixSurfaceLight,
-    surfaceContainerHigh = MiuixSurfaceContainerHighLight,
-    primaryContainer = MiuixPrimaryContainerLight,
-    onPrimaryContainer = MiuixOnPrimaryContainerLight,
+    primary = CouiPrimaryLight,
+    secondary = CouiPrimaryLight,
+    tertiary = CouiSuccess,
+    background = CouiBackgroundLight,
+    surface = CouiSurfaceLight,
+    surfaceVariant = CouiSurfaceVariantLight,
+    surfaceContainer = CouiSurfaceLight,
+    surfaceContainerLow = CouiSurfaceLight,
+    surfaceContainerHigh = CouiSurfaceContainerHighLight,
+    primaryContainer = CouiPrimaryContainerLight,
+    onPrimaryContainer = CouiOnPrimaryContainerLight,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
-    onBackground = MiuixTextPrimaryLight,
-    onSurface = MiuixTextPrimaryLight,
-    onSurfaceVariant = MiuixTextSecondaryLight,
-    error = MiuixError,
-    errorContainer = MiuixErrorContainerLight,
-    onErrorContainer = MiuixError,
-    outline = MiuixDividerLight,
-    outlineVariant = MiuixDividerLight
+    onBackground = CouiTextPrimaryLight,
+    onSurface = CouiTextPrimaryLight,
+    onSurfaceVariant = CouiTextSecondaryLight,
+    error = CouiError,
+    errorContainer = CouiErrorContainerLight,
+    onErrorContainer = CouiError,
+    outline = CouiDividerLight,
+    outlineVariant = CouiDividerLight
 )
 
 @Composable
@@ -149,7 +152,7 @@ fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    val miuixPalette = if (darkTheme) DarkMiuixPalette else LightMiuixPalette
+    val couiPalette = if (darkTheme) DarkCouiPalette else LightCouiPalette
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     val view = LocalView.current
@@ -162,7 +165,7 @@ fun MyApplicationTheme(
         }
     }
 
-    CompositionLocalProvider(LocalMiuixColors provides miuixPalette) {
+    CompositionLocalProvider(LocalCouiColors provides couiPalette) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

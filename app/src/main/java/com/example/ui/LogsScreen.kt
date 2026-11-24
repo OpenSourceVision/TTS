@@ -48,16 +48,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.data.HistoryEntity
-import com.example.ui.miuix.MiuixActionButton
-import com.example.ui.miuix.MiuixButtonVariant
-import com.example.ui.miuix.MiuixCard
-import com.example.ui.miuix.MiuixDialog
-import com.example.ui.miuix.MiuixHairlineDivider
-import com.example.ui.miuix.MiuixIconButton
-import com.example.ui.miuix.MiuixLargeHeader
-import com.example.ui.theme.MiuixTheme
+import com.example.ui.coui.CouiActionButton
+import com.example.ui.coui.CouiButtonVariant
+import com.example.ui.coui.CouiCard
+import com.example.ui.coui.CouiCardShape
+import com.example.ui.coui.CouiDialog
+import com.example.ui.coui.CouiHairlineDivider
+import com.example.ui.coui.CouiIconButton
+import com.example.ui.coui.CouiLargeHeader
+import com.example.ui.theme.CouiTheme
 import com.example.viewmodel.TtsViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -66,12 +68,13 @@ import java.util.Locale
 @Composable
 fun LogsScreen(
     viewModel: TtsViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomPadding: Dp = 0.dp
 ) {
     val context = LocalContext.current
     val history by viewModel.historyState.collectAsState()
     val listState = rememberLazyListState()
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
 
     var selectedLogForDetail by remember { mutableStateOf<HistoryEntity?>(null) }
 
@@ -85,13 +88,13 @@ fun LogsScreen(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        MiuixLargeHeader(
+        CouiLargeHeader(
             title = "日志",
             actions = {
                 if (history.isNotEmpty()) {
-                    MiuixIconButton(
+                    CouiIconButton(
                         onClick = { viewModel.clearHistory() },
                         icon = Icons.Rounded.DeleteOutline,
                         contentDescription = "清空",
@@ -109,7 +112,7 @@ fun LogsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(32.dp),
+                    .padding(start = 32.dp, end = 32.dp, top = 32.dp, bottom = 32.dp + bottomPadding),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -118,8 +121,8 @@ fun LogsScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(20.dp))
+                            .size(68.dp)
+                            .clip(RoundedCornerShape(22.dp))
                             .background(colors.surface),
                         contentAlignment = Alignment.Center
                     ) {
@@ -127,14 +130,19 @@ fun LogsScreen(
                             imageVector = Icons.Rounded.History,
                             contentDescription = "暂无日志",
                             tint = colors.textTertiary,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(30.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "暂无日志",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "开启服务后的请求与状态将在此显示",
+                        style = MaterialTheme.typography.bodySmall,
                         color = colors.textSecondary
                     )
                 }
@@ -145,8 +153,8 @@ fun LogsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                contentPadding = PaddingValues(bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(bottom = 12.dp + bottomPadding),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(history, key = { it.id }) { log ->
                     val isCrash = log.status == "CRASH"
@@ -177,14 +185,14 @@ fun LogsScreen(
                     val formattedTime = timeFormat.format(Date(log.timestamp))
                     val hits = remember(log.hitsJson) { log.parseHits() }
 
-                    MiuixCard(
+                    CouiCard(
                         containerColor = if (isCrash) colors.errorContainer.copy(alpha = 0.45f) else colors.surface,
-                        shape = RoundedCornerShape(16.dp),
+                        shape = CouiCardShape,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(CouiCardShape)
                             .clickable { selectedLogForDetail = log }
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -257,7 +265,7 @@ fun LogsScreen(
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
-                            MiuixHairlineDivider(insetStart = 0.dp, insetEnd = 0.dp)
+                            CouiHairlineDivider(insetStart = 0.dp, insetEnd = 0.dp)
                             Spacer(modifier = Modifier.height(6.dp))
 
                             Row(
@@ -323,7 +331,7 @@ fun LogsScreen(
         val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
         val formattedTime = timeFormat.format(Date(log.timestamp))
 
-        MiuixDialog(
+        CouiDialog(
             onDismissRequest = { selectedLogForDetail = null },
             title = if (log.status == "CRASH") "崩溃堆栈" else "日志详情",
             subtitle = formattedTime,
@@ -378,13 +386,13 @@ fun LogsScreen(
                 }
             },
             buttons = {
-                MiuixActionButton(
+                CouiActionButton(
                     text = "关闭",
                     onClick = { selectedLogForDetail = null },
-                    variant = MiuixButtonVariant.Secondary,
+                    variant = CouiButtonVariant.Secondary,
                     modifier = Modifier.weight(1f)
                 )
-                MiuixActionButton(
+                CouiActionButton(
                     text = "复制",
                     icon = Icons.Rounded.ContentCopy,
                     onClick = {
@@ -406,7 +414,7 @@ fun LogsScreen(
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
                     },
-                    variant = MiuixButtonVariant.Primary,
+                    variant = CouiButtonVariant.Primary,
                     modifier = Modifier.weight(1f)
                 )
             }

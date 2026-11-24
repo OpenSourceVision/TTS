@@ -27,6 +27,8 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.ApplicationEngine
+import io.ktor.server.engine.applicationEngineEnvironment
+import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.request.contentLength
 import io.ktor.server.request.httpMethod
@@ -40,10 +42,12 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,6 +71,10 @@ class TtsServerService : Service() {
     // 【关键改动1】：使用 Ktor 的 ApplicationEngine (CIO 引擎) 替代原生的 Socket/ServerSocket
     private var ktorServer: ApplicationEngine? = null
     private var currentPort: Int = -1
+    private val serverMutex = Mutex()
+    @Volatile
+    private var shouldRunServer: Boolean = false
+    private var stopJob: Job? = null
 
     private var activeTts: TextToSpeech? = null
     private var activeEnginePackage: String? = null
@@ -102,18 +110,32 @@ class TtsServerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: ACTION_START_SERVER
         if (action == ACTION_STOP_SERVER) {
+            shouldRunServer = false
             settingsJob?.cancel()
             settingsJob = null
-            stopServer()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
             } else {
                 @Suppress("DEPRECATION")
                 stopForeground(true)
             }
-            stopSelf()
+            stopJob?.cancel()
+            stopJob = serviceScope.launch {
+                serverMutex.withLock {
+                    stopServerLocked()
+                }
+                withContext(Dispatchers.Main) {
+                    if (!shouldRunServer) {
+                        stopSelf()
+                    }
+                }
+            }
             return START_NOT_STICKY
         }
+
+        shouldRunServer = true
+        stopJob?.cancel()
+        stopJob = null
 
         // 立即调用 startForeground 满足 Android 8.0+ / 12+ / 14+ 前台服务 5 秒超时限制，防止闪退
         val initialPort = if (_serverPort.value > 0) _serverPort.value else 8080
@@ -141,21 +163,31 @@ class TtsServerService : Service() {
         settingsJob = serviceScope.launch {
             val db = AppDatabase.getDatabase(applicationContext)
             db.appDao().getSettingsFlow().collect { settingsOpt ->
+                if (!shouldRunServer) return@collect
                 val settings = settingsOpt ?: SettingsEntity()
 
                 _serverPort.value = settings.port
                 _activeEngine.value = settings.targetEnginePackage
 
-                // 【关键改动2】：配置改变时，检测端口是否变更，自动重启 Ktor 嵌入式 HTTP 服务器
-                if (ktorServer != null && currentPort != settings.port) {
-                    startHttpServer(settings.port)
-                } else if (ktorServer == null) {
-                    startHttpServer(settings.port)
+                val started = serverMutex.withLock {
+                    if (!shouldRunServer) {
+                        false
+                    } else if (ktorServer != null && currentPort != settings.port) {
+                        startHttpServerLocked(settings.port)
+                    } else if (ktorServer == null) {
+                        startHttpServerLocked(settings.port)
+                    } else {
+                        true
+                    }
                 }
 
                 withContext(Dispatchers.Main) {
                     val engineLabel = getEngineLabel(settings.targetEnginePackage)
-                    val notification = buildNotification(settings.port, engineLabel)
+                    val notification = if (started) {
+                        buildNotification(settings.port, engineLabel)
+                    } else {
+                        buildNotification(settings.port, "端口 ${settings.port} 被占用，启动失败")
+                    }
 
                     val manager = getSystemService(NotificationManager::class.java)
                     manager?.notify(NOTIFICATION_ID, notification)
@@ -169,7 +201,10 @@ class TtsServerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        stopServer()
+        shouldRunServer = false
+        settingsJob?.cancel()
+        stopJob?.cancel()
+        stopServerLocked()
         activeTts?.shutdown()
         job.cancel()
         super.onDestroy()
@@ -185,37 +220,101 @@ class TtsServerService : Service() {
         }
     }
 
-    // 【关键改动3】：通过 Ktor embeddedServer 启动 CIO 引擎服务器，并注册 GET/POST 路由
-    private fun startHttpServer(port: Int) {
-        try {
-            stopServer()
-            currentPort = port
-
-            val server = embeddedServer(CIO, port = port) {
-                routing {
-                    // 【关键改动4】：同时支持 GET/POST 请求以及 /、/tts 与 /api/tts 路径
-                    get("/") { handleTtsRequest(call) }
-                    post("/") { handleTtsRequest(call) }
-                    get("/tts") { handleTtsRequest(call) }
-                    post("/tts") { handleTtsRequest(call) }
-                    get("/api/tts") { handleTtsRequest(call) }
-                    post("/api/tts") { handleTtsRequest(call) }
-                }
+    private fun isPortAvailable(port: Int): Boolean {
+        return try {
+            java.net.ServerSocket().use { socket ->
+                socket.reuseAddress = true
+                socket.bind(java.net.InetSocketAddress(port))
             }
-
-            server.start(wait = false)
-            ktorServer = server
-            _isServerRunning.value = true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            _isServerRunning.value = false
+            true
+        } catch (e: Throwable) {
+            false
         }
     }
 
-    private fun stopServer() {
+    // 【关键改动3】：通过 Ktor embeddedServer 启动 CIO 引擎服务器，隔离异步绑定异常并等待端口释放
+    private suspend fun startHttpServerLocked(port: Int): Boolean {
         try {
-            ktorServer?.stop(1000, 2000)
-        } catch (e: Exception) {
+            stopServerLocked()
+
+            // 若端口正处于刚释放或 TIME_WAIT 过渡态，短暂重试等待内核释放
+            var portReady = false
+            for (attempt in 1..6) {
+                if (!shouldRunServer) return false
+                if (isPortAvailable(port)) {
+                    portReady = true
+                    break
+                }
+                delay(200)
+            }
+
+            if (!portReady) {
+                _isServerRunning.value = false
+                currentPort = -1
+                logToDatabase(
+                    text = "HTTP Server (:$port)",
+                    engine = "System",
+                    status = "FAILED",
+                    durationMs = 0L,
+                    errorMsg = "端口 $port 已被其他进程占用，请更换端口或稍后重试"
+                )
+                return false
+            }
+
+            currentPort = port
+            val serverExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+                throwable.printStackTrace()
+                _isServerRunning.value = false
+                currentPort = -1
+                ktorServer = null
+                serviceScope.launch {
+                    try {
+                        logToDatabase(
+                            text = "HTTP Server (:$port)",
+                            engine = "System",
+                            status = "FAILED",
+                            durationMs = 0L,
+                            errorMsg = "服务器监听异常: ${throwable.javaClass.simpleName}: ${throwable.message}"
+                        )
+                    } catch (_: Throwable) {}
+                }
+            }
+
+            val env = applicationEngineEnvironment {
+                parentCoroutineContext = SupervisorJob(job) + Dispatchers.IO + serverExceptionHandler
+                connector {
+                    this.port = port
+                }
+                module {
+                    routing {
+                        // 【关键改动4】：同时支持 GET/POST 请求以及 /、/tts 与 /api/tts 路径
+                        get("/") { handleTtsRequest(call) }
+                        post("/") { handleTtsRequest(call) }
+                        get("/tts") { handleTtsRequest(call) }
+                        post("/tts") { handleTtsRequest(call) }
+                        get("/api/tts") { handleTtsRequest(call) }
+                        post("/api/tts") { handleTtsRequest(call) }
+                    }
+                }
+            }
+
+            val server = embeddedServer(CIO, env)
+            server.start(wait = false)
+            ktorServer = server
+            _isServerRunning.value = true
+            return true
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            _isServerRunning.value = false
+            currentPort = -1
+            return false
+        }
+    }
+
+    private fun stopServerLocked() {
+        try {
+            ktorServer?.stop(200, 1000)
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
         ktorServer = null

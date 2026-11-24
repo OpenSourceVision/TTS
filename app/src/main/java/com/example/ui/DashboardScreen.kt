@@ -2,9 +2,8 @@ package com.example.ui
 
 import android.content.Intent
 import android.os.Build
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,12 +18,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Stop
@@ -44,33 +43,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.service.TtsServerService
-import com.example.ui.miuix.MiuixActionButton
-import com.example.ui.miuix.MiuixBentoActionCard
-import com.example.ui.miuix.MiuixBentoMetricCard
-import com.example.ui.miuix.MiuixButtonVariant
-import com.example.ui.miuix.MiuixCard
-import com.example.ui.miuix.MiuixDialog
-import com.example.ui.miuix.MiuixDropdownMenu
-import com.example.ui.miuix.MiuixDropdownMenuItem
-import com.example.ui.miuix.MiuixIconButton
-import com.example.ui.miuix.MiuixLargeHeader
-import com.example.ui.miuix.MiuixSlider
-import com.example.ui.miuix.MiuixSmallTitle
-import com.example.ui.miuix.MiuixSuperSwitchRow
-import com.example.ui.miuix.MiuixTextField
-import com.example.ui.theme.MiuixTheme
+import com.example.ui.coui.CouiActionButton
+import com.example.ui.coui.CouiBentoActionCard
+import com.example.ui.coui.CouiBentoMetricCard
+import com.example.ui.coui.CouiButtonVariant
+import com.example.ui.coui.CouiCard
+import com.example.ui.coui.CouiDialog
+import com.example.ui.coui.CouiDropdownMenu
+import com.example.ui.coui.CouiDropdownMenuItem
+import com.example.ui.coui.CouiIconButton
+import com.example.ui.coui.CouiLargeHeader
+import com.example.ui.coui.CouiSectionTitle
+import com.example.ui.coui.CouiSlider
+import com.example.ui.coui.CouiSwitchRow
+import com.example.ui.coui.CouiTextField
+import com.example.ui.theme.CouiTheme
 import com.example.viewmodel.TtsViewModel
 import java.util.Locale
 
 @Composable
 fun DashboardScreen(
     viewModel: TtsViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomPadding: Dp = 0.dp
 ) {
     val context = LocalContext.current
     val settings by viewModel.settingsState.collectAsState()
@@ -88,7 +88,7 @@ fun DashboardScreen(
         }
     }
 
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
 
     fun toggleServer(shouldStart: Boolean) {
         val intent = Intent(context, TtsServerService::class.java).apply {
@@ -106,69 +106,30 @@ fun DashboardScreen(
             .fillMaxSize()
             .background(colors.background)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        MiuixLargeHeader(
-            title = "主页",
-            actions = {
-                val badgeBg by animateColorAsState(
-                    targetValue = if (isServerRunning) colors.successContainer else colors.surface,
-                    animationSpec = tween(200),
-                    label = "headerStatusBg"
-                )
-                val badgeDot by animateColorAsState(
-                    targetValue = if (isServerRunning) colors.success else colors.textTertiary,
-                    animationSpec = tween(200),
-                    label = "headerStatusDot"
-                )
-                val badgeText by animateColorAsState(
-                    targetValue = if (isServerRunning) colors.success else colors.textSecondary,
-                    animationSpec = tween(200),
-                    label = "headerStatusText"
-                )
-
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(badgeBg)
-                        .padding(horizontal = 11.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(badgeDot)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isServerRunning) "运行中 · :${settings.port}" else "已停止",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = badgeText
-                    )
-                }
-            }
-        )
+        CouiLargeHeader(title = "主页")
 
         Spacer(modifier = Modifier.height(6.dp))
 
         // 1. Standalone Server Switch Card
-        MiuixCard {
-            MiuixSuperSwitchRow(
+        CouiCard {
+            CouiSwitchRow(
                 title = "服务开关",
-                summary = if (isServerRunning) "127.0.0.1:${settings.port}" else null,
+                summary = if (isServerRunning) "监听 127.0.0.1:${settings.port}" else "未启动 · 点击开启转发",
                 checked = isServerRunning,
                 onCheckedChange = ::toggleServer,
-                minHeight = 84.dp,
+                leadingIcon = Icons.Rounded.GraphicEq,
+                leadingTint = if (isServerRunning) colors.success else colors.primary,
+                minHeight = 76.dp,
                 switchModifier = Modifier.testTag("server_toggle_switch")
             )
         }
 
         // 2. Service Configuration (Engine + 2-Column Bento Metric Cards)
-        MiuixSmallTitle(text = "配置")
+        CouiSectionTitle(text = "配置")
 
-        MiuixCard {
+        CouiCard {
             val selectedEngineLabel = engines.firstOrNull {
                 it.packageName == settings.targetEnginePackage
             }?.label ?: settings.targetEnginePackage.ifBlank { "未选择" }
@@ -178,7 +139,7 @@ fun DashboardScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .defaultMinSize(minHeight = 84.dp)
+                        .defaultMinSize(minHeight = 76.dp)
                         .clickable { engineDropdownExpanded = true }
                         .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)
                         .testTag("engine_dropdown_trigger"),
@@ -189,7 +150,6 @@ fun DashboardScreen(
                         Text(
                             text = "引擎",
                             style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
                             color = colors.textPrimary
                         )
                         Spacer(modifier = Modifier.height(2.dp))
@@ -207,39 +167,39 @@ fun DashboardScreen(
                             imageVector = Icons.Rounded.UnfoldMore,
                             contentDescription = "展开选择",
                             tint = colors.textTertiary,
-                            modifier = Modifier.size(19.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Box(
                             modifier = Modifier
-                                .width(0.75.dp)
-                                .height(18.dp)
+                                .width(0.5.dp)
+                                .height(16.dp)
                                 .background(colors.divider)
                         )
-                        MiuixIconButton(
+                        CouiIconButton(
                             onClick = { viewModel.loadEngines(context) },
                             icon = Icons.Rounded.Refresh,
                             contentDescription = "刷新引擎",
                             tint = colors.textSecondary,
-                            iconSize = 19.dp,
+                            iconSize = 18.dp,
                             modifier = Modifier.testTag("refresh_engines_button")
                         )
                     }
                 }
 
-                MiuixDropdownMenu(
+                CouiDropdownMenu(
                     expanded = engineDropdownExpanded,
                     onDismissRequest = { engineDropdownExpanded = false },
                     modifier = Modifier.fillMaxWidth(0.88f)
                 ) {
                     if (engines.isEmpty()) {
-                        MiuixDropdownMenuItem(
+                        CouiDropdownMenuItem(
                             text = "无可用引擎",
                             onClick = { engineDropdownExpanded = false }
                         )
                     } else {
                         engines.forEach { engine ->
-                            MiuixDropdownMenuItem(
+                            CouiDropdownMenuItem(
                                 text = engine.label,
                                 subtitle = engine.packageName,
                                 selected = engine.packageName == settings.targetEnginePackage,
@@ -254,13 +214,13 @@ fun DashboardScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            MiuixBentoMetricCard(
+            CouiBentoMetricCard(
                 label = "语速",
                 value = "${String.format(Locale.US, "%.1f", settings.speechRate)}x",
                 onClick = { showSpeechRateDialog = true },
@@ -268,7 +228,7 @@ fun DashboardScreen(
                     .weight(1f)
                     .testTag("edit_rate_button")
             )
-            MiuixBentoMetricCard(
+            CouiBentoMetricCard(
                 label = "端口",
                 value = settings.port.toString(),
                 onClick = { showPortDialog = true },
@@ -278,66 +238,14 @@ fun DashboardScreen(
             )
         }
 
-        // 3. Compact Speech Test Card
-        MiuixSmallTitle(text = "朗读测试")
-
-        MiuixCard {
-            Column(modifier = Modifier.padding(14.dp)) {
-                MiuixTextField(
-                    value = testText,
-                    onValueChange = { testText = it },
-                    placeholder = "输入测试文本",
-                    singleLine = false,
-                    minLines = 4,
-                    maxLines = 5,
-                    modifier = Modifier.testTag("test_text_field")
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    if (isTesting) {
-                        MiuixActionButton(
-                            text = "停止",
-                            onClick = { viewModel.stopTest() },
-                            variant = MiuixButtonVariant.Destructive,
-                            icon = Icons.Rounded.Stop,
-                            height = 36.dp,
-                            modifier = Modifier.testTag("stop_test_button")
-                        )
-                    } else {
-                        MiuixActionButton(
-                            text = "试听",
-                            onClick = {
-                                viewModel.playTest(
-                                    context,
-                                    testText,
-                                    settings.targetEnginePackage,
-                                    settings.speechRate,
-                                    settings.pitch
-                                )
-                            },
-                            variant = MiuixButtonVariant.TonalPrimary,
-                            icon = Icons.Rounded.PlayArrow,
-                            height = 36.dp,
-                            modifier = Modifier.testTag("start_test_button")
-                        )
-                    }
-                }
-            }
-        }
-
-        // 4. Legado Export / Quick Actions (2-Column Bento Tiles)
-        MiuixSmallTitle(text = "转发")
+        // 3. Legado Export / Quick Actions (2-Column Bento Tiles, matching 语速/端口 size)
+        CouiSectionTitle(text = "转发")
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            MiuixBentoActionCard(
+            CouiBentoActionCard(
                 title = "复制",
                 icon = Icons.Rounded.ContentCopy,
                 isPrimary = false,
@@ -346,7 +254,7 @@ fun DashboardScreen(
                     .weight(1f)
                     .testTag("copy_config_button")
             )
-            MiuixBentoActionCard(
+            CouiBentoActionCard(
                 title = "导入",
                 icon = Icons.AutoMirrored.Rounded.Send,
                 isPrimary = false,
@@ -357,7 +265,66 @@ fun DashboardScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        // 4. Compact Speech Test Card
+        CouiSectionTitle(text = "朗读测试")
+
+        CouiCard {
+            Column(modifier = Modifier.padding(16.dp)) {
+                CouiTextField(
+                    value = testText,
+                    onValueChange = { testText = it },
+                    placeholder = "输入测试文本",
+                    singleLine = false,
+                    minLines = 4,
+                    maxLines = 5,
+                    modifier = Modifier.testTag("test_text_field")
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${testText.length} 字",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textTertiary
+                    )
+
+                    if (isTesting) {
+                        CouiActionButton(
+                            text = "停止",
+                            onClick = { viewModel.stopTest() },
+                            variant = CouiButtonVariant.Destructive,
+                            icon = Icons.Rounded.Stop,
+                            height = 36.dp,
+                            modifier = Modifier.testTag("stop_test_button")
+                        )
+                    } else {
+                        CouiActionButton(
+                            text = "试听",
+                            onClick = {
+                                viewModel.playTest(
+                                    context,
+                                    testText,
+                                    settings.targetEnginePackage,
+                                    settings.speechRate,
+                                    settings.pitch
+                                )
+                            },
+                            variant = CouiButtonVariant.TonalPrimary,
+                            icon = Icons.Rounded.PlayArrow,
+                            height = 36.dp,
+                            modifier = Modifier.testTag("start_test_button")
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp + bottomPadding))
     }
 
     // Speech Rate Dialog
@@ -369,7 +336,7 @@ fun DashboardScreen(
             mutableStateOf(settings.speechRate.coerceIn(0.1f, 4.0f))
         }
 
-        MiuixDialog(
+        CouiDialog(
             onDismissRequest = { showSpeechRateDialog = false },
             title = "语速",
             subtitle = "${String.format(Locale.US, "%.1f", sliderValue)}x",
@@ -378,7 +345,7 @@ fun DashboardScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    MiuixSlider(
+                    CouiSlider(
                         value = sliderValue,
                         onValueChange = { newValue ->
                             sliderValue = Math.round(newValue * 10f) / 10f
@@ -389,7 +356,7 @@ fun DashboardScreen(
                         modifier = Modifier.testTag("rate_dialog_slider")
                     )
 
-                    MiuixTextField(
+                    CouiTextField(
                         value = rateInputInternal,
                         onValueChange = { input ->
                             val filtered = input.filter { char -> char.isDigit() || char == '.' }
@@ -409,15 +376,15 @@ fun DashboardScreen(
                 }
             },
             buttons = {
-                MiuixActionButton(
+                CouiActionButton(
                     text = "取消",
                     onClick = { showSpeechRateDialog = false },
-                    variant = MiuixButtonVariant.Secondary,
+                    variant = CouiButtonVariant.Secondary,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("rate_dialog_cancel")
                 )
-                MiuixActionButton(
+                CouiActionButton(
                     text = "确定",
                     onClick = {
                         val finalRate = rateInputInternal.toFloatOrNull() ?: sliderValue
@@ -425,7 +392,7 @@ fun DashboardScreen(
                         viewModel.updateSettings(settings.copy(speechRate = roundedRate))
                         showSpeechRateDialog = false
                     },
-                    variant = MiuixButtonVariant.Primary,
+                    variant = CouiButtonVariant.Primary,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("rate_dialog_confirm")
@@ -438,12 +405,12 @@ fun DashboardScreen(
     if (showPortDialog) {
         var portInputInternal by remember { mutableStateOf(settings.port.toString()) }
 
-        MiuixDialog(
+        CouiDialog(
             onDismissRequest = { showPortDialog = false },
             title = "监听端口",
             subtitle = "修改后重启服务生效",
             content = {
-                MiuixTextField(
+                CouiTextField(
                     value = portInputInternal,
                     onValueChange = { portInputInternal = it.filter { char -> char.isDigit() } },
                     placeholder = "8080",
@@ -454,15 +421,15 @@ fun DashboardScreen(
                 )
             },
             buttons = {
-                MiuixActionButton(
+                CouiActionButton(
                     text = "取消",
                     onClick = { showPortDialog = false },
-                    variant = MiuixButtonVariant.Secondary,
+                    variant = CouiButtonVariant.Secondary,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("port_dialog_cancel")
                 )
-                MiuixActionButton(
+                CouiActionButton(
                     text = "确定",
                     onClick = {
                         val newPort = portInputInternal.toIntOrNull() ?: 8080
@@ -470,7 +437,7 @@ fun DashboardScreen(
                         viewModel.updateSettings(settings.copy(port = validatedPort))
                         showPortDialog = false
                     },
-                    variant = MiuixButtonVariant.Primary,
+                    variant = CouiButtonVariant.Primary,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("port_dialog_confirm")

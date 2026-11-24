@@ -55,32 +55,35 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.data.RuleEntity
 import com.example.data.RuleGroupEntity
-import com.example.ui.miuix.MiuixActionButton
-import com.example.ui.miuix.MiuixButtonVariant
-import com.example.ui.miuix.MiuixCard
-import com.example.ui.miuix.MiuixDialog
-import com.example.ui.miuix.MiuixDropdownMenu
-import com.example.ui.miuix.MiuixDropdownMenuItem
-import com.example.ui.miuix.MiuixHairlineDivider
-import com.example.ui.miuix.MiuixIconButton
-import com.example.ui.miuix.MiuixLargeHeader
-import com.example.ui.miuix.MiuixSearchBar
-import com.example.ui.miuix.MiuixSwitch
-import com.example.ui.miuix.MiuixTextField
-import com.example.ui.theme.MiuixTheme
+import com.example.ui.coui.CouiActionButton
+import com.example.ui.coui.CouiButtonVariant
+import com.example.ui.coui.CouiCard
+import com.example.ui.coui.CouiCardShape
+import com.example.ui.coui.CouiDialog
+import com.example.ui.coui.CouiDropdownMenu
+import com.example.ui.coui.CouiDropdownMenuItem
+import com.example.ui.coui.CouiHairlineDivider
+import com.example.ui.coui.CouiIconButton
+import com.example.ui.coui.CouiLargeHeader
+import com.example.ui.coui.CouiSearchBar
+import com.example.ui.coui.CouiSwitch
+import com.example.ui.coui.CouiTextField
+import com.example.ui.theme.CouiTheme
 import com.example.viewmodel.GroupSortOrder
 import com.example.viewmodel.TtsViewModel
 
 @Composable
 fun RulesScreen(
     viewModel: TtsViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomPadding: Dp = 0.dp
 ) {
     val context = LocalContext.current
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     val rulesList by viewModel.rulesState.collectAsState()
     val ruleGroupsList by viewModel.ruleGroupsState.collectAsState()
 
@@ -154,20 +157,20 @@ fun RulesScreen(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background)
-            .padding(horizontal = 14.dp)
+            .padding(horizontal = 16.dp)
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp + bottomPadding),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Header Section
             item {
-                MiuixLargeHeader(
+                CouiLargeHeader(
                     title = "规则",
                     actions = {
                         Box {
-                            MiuixIconButton(
+                            CouiIconButton(
                                 onClick = { showSortMenu = true },
                                 icon = Icons.AutoMirrored.Rounded.Sort,
                                 contentDescription = "排序",
@@ -175,12 +178,12 @@ fun RulesScreen(
                                 modifier = Modifier.testTag("sort_groups_button")
                             )
 
-                            MiuixDropdownMenu(
+                            CouiDropdownMenu(
                                 expanded = showSortMenu,
                                 onDismissRequest = { showSortMenu = false }
                             ) {
                                 GroupSortOrder.values().forEach { order ->
-                                    MiuixDropdownMenuItem(
+                                    CouiDropdownMenuItem(
                                         text = order.label,
                                         selected = sortOrder == order,
                                         onClick = {
@@ -192,7 +195,7 @@ fun RulesScreen(
                             }
                         }
 
-                        MiuixIconButton(
+                        CouiIconButton(
                             onClick = {
                                 editingGroup = null
                                 groupNameInput = ""
@@ -206,7 +209,7 @@ fun RulesScreen(
                         )
 
                         Box {
-                            MiuixIconButton(
+                            CouiIconButton(
                                 onClick = { showMoreMenu = true },
                                 icon = Icons.Rounded.MoreHoriz,
                                 contentDescription = "更多选项",
@@ -214,11 +217,11 @@ fun RulesScreen(
                                 modifier = Modifier.testTag("more_rules_options_button")
                             )
 
-                            MiuixDropdownMenu(
+                            CouiDropdownMenu(
                                 expanded = showMoreMenu,
                                 onDismissRequest = { showMoreMenu = false }
                             ) {
-                                MiuixDropdownMenuItem(
+                                CouiDropdownMenuItem(
                                     text = "恢复默认规则",
                                     leadingIcon = Icons.Rounded.Refresh,
                                     onClick = {
@@ -226,7 +229,7 @@ fun RulesScreen(
                                         showResetDefaultConfirmDialog = true
                                     }
                                 )
-                                MiuixDropdownMenuItem(
+                                CouiDropdownMenuItem(
                                     text = "清空所有规则",
                                     leadingIcon = Icons.Rounded.DeleteOutline,
                                     isDestructive = true,
@@ -241,9 +244,9 @@ fun RulesScreen(
                 )
             }
 
-            // Miuix Pill Search Bar
+            // COUI Pill Search Bar
             item {
-                MiuixSearchBar(
+                CouiSearchBar(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     placeholder = "搜索",
@@ -254,7 +257,7 @@ fun RulesScreen(
             // Groups and Inner Rules Listing
             if (sortedGroups.isEmpty()) {
                 item {
-                    MiuixCard {
+                    CouiCard {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -287,10 +290,10 @@ fun RulesScreen(
                             )
                     }
 
-                    MiuixCard(
-                        shape = RoundedCornerShape(16.dp),
+                    CouiCard(
+                        shape = CouiCardShape,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(CouiCardShape)
                             .testTag("group_card_${group.id}")
                     ) {
                         Column {
@@ -308,17 +311,24 @@ fun RulesScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Folder,
-                                        contentDescription = "Group",
-                                        tint = colors.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(colors.primaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Folder,
+                                            contentDescription = "Group",
+                                            tint = colors.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text(
                                         text = formatGroupTitle(group),
                                         style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.SemiBold,
                                         color = colors.textPrimary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -377,11 +387,11 @@ fun RulesScreen(
                                             )
                                         }
 
-                                        MiuixDropdownMenu(
+                                        CouiDropdownMenu(
                                             expanded = showGroupMenu,
                                             onDismissRequest = { showGroupMenu = false }
                                         ) {
-                                            MiuixDropdownMenuItem(
+                                            CouiDropdownMenuItem(
                                                 text = "编辑分组",
                                                 leadingIcon = Icons.Rounded.Edit,
                                                 onClick = {
@@ -392,7 +402,7 @@ fun RulesScreen(
                                                     showGroupDialog = true
                                                 }
                                             )
-                                            MiuixDropdownMenuItem(
+                                            CouiDropdownMenuItem(
                                                 text = "删除分组",
                                                 leadingIcon = Icons.Rounded.DeleteOutline,
                                                 isDestructive = true,
@@ -423,7 +433,7 @@ fun RulesScreen(
                                         .padding(bottom = 6.dp)
                                 ) {
                                     if (groupRules.isEmpty()) {
-                                        MiuixHairlineDivider(insetStart = 14.dp, insetEnd = 14.dp)
+                                        CouiHairlineDivider(insetStart = 16.dp, insetEnd = 16.dp)
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -438,11 +448,11 @@ fun RulesScreen(
                                         }
                                     } else {
                                         groupRules.forEach { rule ->
-                                            MiuixHairlineDivider(insetStart = 14.dp, insetEnd = 14.dp)
+                                            CouiHairlineDivider(insetStart = 16.dp, insetEnd = 16.dp)
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
@@ -496,7 +506,7 @@ fun RulesScreen(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                 ) {
-                                                    MiuixSwitch(
+                                                    CouiSwitch(
                                                         checked = rule.isEnabled,
                                                         onCheckedChange = { viewModel.toggleRuleEnabled(rule) },
                                                         modifier = Modifier.scale(0.82f)
@@ -547,7 +557,7 @@ fun RulesScreen(
 
     // Dialog: Add / Edit Group
     if (showGroupDialog) {
-        MiuixDialog(
+        CouiDialog(
             onDismissRequest = { showGroupDialog = false },
             title = if (editingGroup == null) "新建分组" else "编辑分组",
             content = {
@@ -555,7 +565,7 @@ fun RulesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    MiuixTextField(
+                    CouiTextField(
                         value = groupNameInput,
                         onValueChange = { groupNameInput = it },
                         label = "分组名",
@@ -564,7 +574,7 @@ fun RulesScreen(
                         modifier = Modifier.testTag("group_name_input")
                     )
 
-                    MiuixTextField(
+                    CouiTextField(
                         value = groupReplacementInput,
                         onValueChange = { groupReplacementInput = it },
                         label = "替代词（可选）",
@@ -575,20 +585,20 @@ fun RulesScreen(
                 }
             },
             buttons = {
-                MiuixActionButton(
+                CouiActionButton(
                     text = "取消",
                     onClick = { showGroupDialog = false },
-                    variant = MiuixButtonVariant.Secondary,
+                    variant = CouiButtonVariant.Secondary,
                     modifier = Modifier.weight(1f)
                 )
-                MiuixActionButton(
+                CouiActionButton(
                     text = "保存",
                     onClick = {
                         val name = groupNameInput.trim()
                         val replacement = groupReplacementInput.trim()
                         if (name.isEmpty()) {
                             Toast.makeText(context, "分组字不能为空", Toast.LENGTH_SHORT).show()
-                            return@MiuixActionButton
+                            return@CouiActionButton
                         }
 
                         val group = editingGroup
@@ -599,7 +609,7 @@ fun RulesScreen(
                         }
                         showGroupDialog = false
                     },
-                    variant = MiuixButtonVariant.Primary,
+                    variant = CouiButtonVariant.Primary,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("save_group_button")
@@ -635,7 +645,7 @@ fun RulesScreen(
             } ?: ""
         }
 
-        MiuixDialog(
+        CouiDialog(
             onDismissRequest = { showRuleDialog = false },
             title = if (editingRule == null) "添加发音规则" else "修改发音规则",
             content = {
@@ -670,7 +680,7 @@ fun RulesScreen(
                         }
                     }
 
-                    MiuixTextField(
+                    CouiTextField(
                         value = ruleTargetInput,
                         onValueChange = { newTarget ->
                             ruleTargetInput = newTarget
@@ -718,7 +728,7 @@ fun RulesScreen(
                         }
                     }
 
-                    MiuixTextField(
+                    CouiTextField(
                         value = ruleReplacementInput,
                         onValueChange = { newRepl ->
                             ruleReplacementInput = newRepl
@@ -751,13 +761,13 @@ fun RulesScreen(
                 }
             },
             buttons = {
-                MiuixActionButton(
+                CouiActionButton(
                     text = "取消",
                     onClick = { showRuleDialog = false },
-                    variant = MiuixButtonVariant.Secondary,
+                    variant = CouiButtonVariant.Secondary,
                     modifier = Modifier.weight(1f)
                 )
-                MiuixActionButton(
+                CouiActionButton(
                     text = "保存",
                     onClick = {
                         val target = ruleTargetInput.trim()
@@ -766,7 +776,7 @@ fun RulesScreen(
 
                         if (target.isEmpty() || replacement.isEmpty()) {
                             Toast.makeText(context, "输入不能为空", Toast.LENGTH_SHORT).show()
-                            return@MiuixActionButton
+                            return@CouiActionButton
                         }
 
                         if (duplicateRule != null) {
@@ -775,14 +785,14 @@ fun RulesScreen(
                                 "匹配词「$target」已在「$duplicateGroupName」中存在，请勿重复添加！",
                                 Toast.LENGTH_LONG
                             ).show()
-                            return@MiuixActionButton
+                            return@CouiActionButton
                         }
 
                         try {
                             Regex(target)
                         } catch (e: Exception) {
                             Toast.makeText(context, "正则表达式无效: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                            return@MiuixActionButton
+                            return@CouiActionButton
                         }
 
                         val rule = editingRule
@@ -806,7 +816,7 @@ fun RulesScreen(
                         showRuleDialog = false
                     },
                     enabled = duplicateRule == null,
-                    variant = MiuixButtonVariant.Primary,
+                    variant = CouiButtonVariant.Primary,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("save_rule_button")
@@ -817,7 +827,7 @@ fun RulesScreen(
 
     // Dialog: Confirm Clear All Rules
     if (showClearAllConfirmDialog) {
-        MiuixDialog(
+        CouiDialog(
             onDismissRequest = { showClearAllConfirmDialog = false },
             title = "清空规则",
             content = {
@@ -829,20 +839,20 @@ fun RulesScreen(
             },
             buttons = {
                 // 左侧：确认按钮（警示色，防止误触）
-                MiuixActionButton(
+                CouiActionButton(
                     text = "确认",
                     onClick = {
                         viewModel.clearAllRules()
                         showClearAllConfirmDialog = false
                     },
-                    variant = MiuixButtonVariant.Destructive,
+                    variant = CouiButtonVariant.Destructive,
                     modifier = Modifier.weight(1f)
                 )
                 // 右侧：取消按钮（安全选项）
-                MiuixActionButton(
+                CouiActionButton(
                     text = "取消",
                     onClick = { showClearAllConfirmDialog = false },
-                    variant = MiuixButtonVariant.Primary,
+                    variant = CouiButtonVariant.Primary,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -851,7 +861,7 @@ fun RulesScreen(
 
     // Dialog: Confirm Reset Default Rules
     if (showResetDefaultConfirmDialog) {
-        MiuixDialog(
+        CouiDialog(
             onDismissRequest = { showResetDefaultConfirmDialog = false },
             title = "恢复默认",
             content = {
@@ -862,19 +872,19 @@ fun RulesScreen(
                 )
             },
             buttons = {
-                MiuixActionButton(
+                CouiActionButton(
                     text = "取消",
                     onClick = { showResetDefaultConfirmDialog = false },
-                    variant = MiuixButtonVariant.Secondary,
+                    variant = CouiButtonVariant.Secondary,
                     modifier = Modifier.weight(1f)
                 )
-                MiuixActionButton(
+                CouiActionButton(
                     text = "恢复",
                     onClick = {
                         viewModel.resetToDefaultTemplate()
                         showResetDefaultConfirmDialog = false
                     },
-                    variant = MiuixButtonVariant.Primary,
+                    variant = CouiButtonVariant.Primary,
                     modifier = Modifier.weight(1f)
                 )
             }

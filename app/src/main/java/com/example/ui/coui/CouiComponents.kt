@@ -1,5 +1,6 @@
-package com.example.ui.miuix
+package com.example.ui.coui
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -13,15 +14,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -49,7 +51,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -57,7 +58,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -81,25 +82,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.ui.theme.MiuixTheme
+import com.example.ui.theme.CouiTheme
 
-val MiuixCardShape = RoundedCornerShape(20.dp)
-val MiuixInnerShape = RoundedCornerShape(14.dp)
-val MiuixButtonShape = RoundedCornerShape(14.dp)
-val MiuixDialogShape = RoundedCornerShape(26.dp)
+val CouiCardShape = RoundedCornerShape(18.dp)
+val CouiInnerShape = RoundedCornerShape(12.dp)
+val CouiButtonShape: Shape = CircleShape
+val CouiDialogShape = RoundedCornerShape(24.dp)
 
 @Composable
-fun MiuixLargeHeader(
+fun CouiLargeHeader(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 6.dp, end = 4.dp, top = 12.dp, bottom = 8.dp),
+            .padding(start = 4.dp, end = 2.dp, top = 14.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -107,7 +108,6 @@ fun MiuixLargeHeader(
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
                 color = colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -125,31 +125,30 @@ fun MiuixLargeHeader(
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             content = actions
         )
     }
 }
 
 @Composable
-fun MiuixSmallTitle(
+fun CouiSectionTitle(
     text: String,
     modifier: Modifier = Modifier
 ) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.Medium,
-        color = MiuixTheme.colors.textSecondary,
-        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp)
+        color = CouiTheme.colors.textSecondary,
+        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp)
     )
 }
 
 @Composable
-fun MiuixCard(
+fun CouiCard(
     modifier: Modifier = Modifier,
-    containerColor: Color = MiuixTheme.colors.surface,
-    shape: RoundedCornerShape = MiuixCardShape,
+    containerColor: Color = CouiTheme.colors.surface,
+    shape: RoundedCornerShape = CouiCardShape,
     border: BorderStroke? = null,
     fillHeight: Boolean = false,
     onClick: (() -> Unit)? = null,
@@ -174,7 +173,7 @@ fun MiuixCard(
 }
 
 @Composable
-fun MiuixHairlineDivider(
+fun CouiHairlineDivider(
     modifier: Modifier = Modifier,
     insetStart: Dp = 16.dp,
     insetEnd: Dp = 16.dp
@@ -182,17 +181,17 @@ fun MiuixHairlineDivider(
     HorizontalDivider(
         modifier = modifier.padding(start = insetStart, end = insetEnd),
         thickness = 0.5.dp,
-        color = MiuixTheme.colors.divider
+        color = CouiTheme.colors.divider
     )
 }
 
 @Composable
-fun MiuixIconButton(
+fun CouiIconButton(
     onClick: () -> Unit,
     icon: ImageVector,
     contentDescription: String,
     modifier: Modifier = Modifier,
-    tint: Color = MiuixTheme.colors.textPrimary,
+    tint: Color = CouiTheme.colors.textPrimary,
     containerColor: Color = Color.Transparent,
     iconSize: Dp = 22.dp
 ) {
@@ -218,13 +217,13 @@ fun MiuixIconButton(
 }
 
 @Composable
-fun MiuixSwitch(
+fun CouiSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     val trackColor by animateColorAsState(
         targetValue = when {
             !enabled && checked -> colors.primary.copy(alpha = 0.4f)
@@ -233,15 +232,15 @@ fun MiuixSwitch(
             else -> colors.switchTrackOff
         },
         animationSpec = tween(durationMillis = 180),
-        label = "miuixSwitchTrack"
+        label = "couiSwitchTrack"
     )
     val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 22.dp else 3.dp,
+        targetValue = if (checked) 23.dp else 3.dp,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMedium
         ),
-        label = "miuixSwitchThumb"
+        label = "couiSwitchThumb"
     )
 
     Box(
@@ -257,8 +256,8 @@ fun MiuixSwitch(
     ) {
         Box(
             modifier = Modifier
-                .width(50.dp)
-                .height(28.dp)
+                .width(46.dp)
+                .height(26.dp)
                 .clip(CircleShape)
                 .background(trackColor)
         ) {
@@ -266,8 +265,8 @@ fun MiuixSwitch(
                 modifier = Modifier
                     .offset(x = thumbOffset)
                     .align(Alignment.CenterStart)
-                    .size(22.dp)
-                    .shadow(1.5.dp, CircleShape, clip = false)
+                    .size(20.dp)
+                    .shadow(2.dp, CircleShape, clip = false)
                     .clip(CircleShape)
                     .background(Color.White)
             )
@@ -276,7 +275,7 @@ fun MiuixSwitch(
 }
 
 @Composable
-fun MiuixSuperArrowRow(
+fun CouiRow(
     title: String,
     modifier: Modifier = Modifier,
     summary: String? = null,
@@ -284,15 +283,16 @@ fun MiuixSuperArrowRow(
     showArrow: Boolean = true,
     isDropdown: Boolean = false,
     leadingIcon: ImageVector? = null,
-    leadingTint: Color = MiuixTheme.colors.primary,
+    leadingTint: Color = CouiTheme.colors.primary,
+    minHeight: Dp = 56.dp,
     onClick: (() -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 56.dp)
+            .defaultMinSize(minHeight = minHeight)
             .then(
                 if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
             )
@@ -308,7 +308,7 @@ fun MiuixSuperArrowRow(
                 Box(
                     modifier = Modifier
                         .size(34.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(CircleShape)
                         .background(leadingTint.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -325,7 +325,6 @@ fun MiuixSuperArrowRow(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
                     color = colors.textPrimary
                 )
                 if (!summary.isNullOrBlank()) {
@@ -362,7 +361,7 @@ fun MiuixSuperArrowRow(
                     imageVector = if (isDropdown) Icons.Rounded.UnfoldMore else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                     contentDescription = null,
                     tint = colors.textTertiary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -370,18 +369,19 @@ fun MiuixSuperArrowRow(
 }
 
 @Composable
-fun MiuixSuperSwitchRow(
+fun CouiSwitchRow(
     title: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     summary: String? = null,
     leadingIcon: ImageVector? = null,
-    leadingTint: Color = MiuixTheme.colors.primary,
+    leadingTint: Color = CouiTheme.colors.primary,
+    leadingContent: (@Composable () -> Unit)? = null,
     minHeight: Dp = 56.dp,
     switchModifier: Modifier = Modifier
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -395,11 +395,14 @@ fun MiuixSuperSwitchRow(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (leadingIcon != null) {
+            if (leadingContent != null) {
+                leadingContent()
+                Spacer(modifier = Modifier.width(12.dp))
+            } else if (leadingIcon != null) {
                 Box(
                     modifier = Modifier
                         .size(34.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(CircleShape)
                         .background(leadingTint.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -416,7 +419,6 @@ fun MiuixSuperSwitchRow(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
                     color = colors.textPrimary
                 )
                 if (!summary.isNullOrBlank()) {
@@ -424,13 +426,15 @@ fun MiuixSuperSwitchRow(
                     Text(
                         text = summary,
                         style = MaterialTheme.typography.bodySmall,
-                        color = colors.textSecondary
+                        color = colors.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
         }
         Spacer(modifier = Modifier.width(12.dp))
-        MiuixSwitch(
+        CouiSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             modifier = switchModifier
@@ -438,7 +442,7 @@ fun MiuixSuperSwitchRow(
     }
 }
 
-enum class MiuixButtonVariant {
+enum class CouiButtonVariant {
     Primary,
     Secondary,
     Destructive,
@@ -446,33 +450,33 @@ enum class MiuixButtonVariant {
 }
 
 @Composable
-fun MiuixActionButton(
+fun CouiActionButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    variant: MiuixButtonVariant = MiuixButtonVariant.Primary,
+    variant: CouiButtonVariant = CouiButtonVariant.Primary,
     enabled: Boolean = true,
     icon: ImageVector? = null,
-    height: Dp = 48.dp
+    height: Dp = 44.dp
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     val containerColor = when (variant) {
-        MiuixButtonVariant.Primary -> colors.primary
-        MiuixButtonVariant.Secondary -> colors.surfaceSecondary
-        MiuixButtonVariant.Destructive -> colors.error
-        MiuixButtonVariant.TonalPrimary -> colors.primaryContainer
+        CouiButtonVariant.Primary -> colors.primary
+        CouiButtonVariant.Secondary -> colors.surfaceSecondary
+        CouiButtonVariant.Destructive -> colors.error
+        CouiButtonVariant.TonalPrimary -> colors.primaryContainer
     }
     val contentColor = when (variant) {
-        MiuixButtonVariant.Primary -> colors.onPrimary
-        MiuixButtonVariant.Secondary -> colors.textPrimary
-        MiuixButtonVariant.Destructive -> Color.White
-        MiuixButtonVariant.TonalPrimary -> colors.onPrimaryContainer
+        CouiButtonVariant.Primary -> colors.onPrimary
+        CouiButtonVariant.Secondary -> colors.textPrimary
+        CouiButtonVariant.Destructive -> Color.White
+        CouiButtonVariant.TonalPrimary -> colors.onPrimaryContainer
     }
 
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = MiuixButtonShape,
+        shape = CouiButtonShape,
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 0.dp,
             pressedElevation = 0.dp,
@@ -484,21 +488,20 @@ fun MiuixActionButton(
             disabledContainerColor = containerColor.copy(alpha = 0.45f),
             disabledContentColor = contentColor.copy(alpha = 0.55f)
         ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
         modifier = modifier.heightIn(min = height)
     ) {
         if (icon != null) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(17.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
         }
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -506,7 +509,7 @@ fun MiuixActionButton(
 }
 
 @Composable
-fun MiuixTextField(
+fun CouiTextField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -523,10 +526,10 @@ fun MiuixTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailingIcon: (@Composable () -> Unit)? = null,
     leadingIcon: (@Composable () -> Unit)? = null,
-    shape: RoundedCornerShape = MiuixInnerShape,
-    containerColor: Color = MiuixTheme.colors.surfaceSecondary
+    shape: RoundedCornerShape = CouiInnerShape,
+    containerColor: Color = CouiTheme.colors.surfaceSecondary
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     var isFocused by remember { mutableStateOf(false) }
 
     val borderColor by animateColorAsState(
@@ -536,12 +539,12 @@ fun MiuixTextField(
             else -> Color.Transparent
         },
         animationSpec = tween(150),
-        label = "miuixFieldBorder"
+        label = "couiFieldBorder"
     )
     val borderWidth by animateDpAsState(
-        targetValue = if (isFocused || isError) 1.5.dp else 0.dp,
+        targetValue = if (isFocused || isError) 1.25.dp else 0.dp,
         animationSpec = tween(150),
-        label = "miuixFieldBorderWidth"
+        label = "couiFieldBorderWidth"
     )
 
     Column(modifier = containerModifier.fillMaxWidth()) {
@@ -564,18 +567,15 @@ fun MiuixTextField(
                 .clip(shape)
                 .background(containerColor, shape)
                 .then(
-                    if (borderWidth > 0.dp) {
-                        Modifier.border(borderWidth, borderColor, shape)
-                    } else {
-                        Modifier
-                    }
+                    if (borderWidth > 0.dp) Modifier.border(borderWidth, borderColor, shape)
+                    else Modifier
                 ),
             singleLine = singleLine,
             minLines = minLines,
             maxLines = maxLines,
             textStyle = TextStyle(
                 color = colors.textPrimary,
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 lineHeight = 22.sp,
                 fontWeight = FontWeight.Normal
             ),
@@ -588,7 +588,7 @@ fun MiuixTextField(
                         .fillMaxWidth()
                         .padding(
                             horizontal = 14.dp,
-                            vertical = if (singleLine) 13.dp else 12.dp
+                            vertical = if (singleLine) 12.dp else 12.dp
                         ),
                     verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top
                 ) {
@@ -628,17 +628,21 @@ fun MiuixTextField(
 }
 
 @Composable
-fun MiuixSearchBar(
+fun CouiSearchBar(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     var isFocused by remember { mutableStateOf(false) }
     val borderColor by animateColorAsState(
         targetValue = if (isFocused) colors.primary else Color.Transparent,
-        label = "searchBorder"
+        label = "couiSearchBorder"
+    )
+    val borderWidth by animateDpAsState(
+        targetValue = if (isFocused) 1.25.dp else 0.dp,
+        label = "couiSearchBorderWidth"
     )
 
     BasicTextField(
@@ -646,19 +650,19 @@ fun MiuixSearchBar(
         onValueChange = onValueChange,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 44.dp)
+            .heightIn(min = 42.dp)
             .onFocusChanged { isFocused = it.isFocused }
             .clip(CircleShape)
             .background(colors.surface, CircleShape)
             .then(
-                if (isFocused) Modifier.border(1.5.dp, borderColor, CircleShape)
+                if (borderWidth > 0.dp) Modifier.border(borderWidth, borderColor, CircleShape)
                 else Modifier
             ),
         singleLine = true,
         textStyle = TextStyle(
             color = colors.textPrimary,
-            fontSize = 16.sp,
-            lineHeight = 22.sp,
+            fontSize = 15.sp,
+            lineHeight = 20.sp,
             fontWeight = FontWeight.Normal
         ),
         cursorBrush = SolidColor(colors.primary),
@@ -666,14 +670,14 @@ fun MiuixSearchBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Search,
                     contentDescription = "搜索",
                     tint = colors.textSecondary,
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Box(modifier = Modifier.weight(1f)) {
@@ -692,7 +696,7 @@ fun MiuixSearchBar(
                     Spacer(modifier = Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .clip(CircleShape)
                             .background(colors.surfaceHighlight)
                             .clickable { onValueChange("") },
@@ -702,7 +706,7 @@ fun MiuixSearchBar(
                             imageVector = Icons.Rounded.Close,
                             contentDescription = "清除搜索",
                             tint = colors.textSecondary,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
@@ -713,14 +717,14 @@ fun MiuixSearchBar(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MiuixSlider(
+fun CouiSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
     modifier: Modifier = Modifier,
     steps: Int = 0
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     val interactionSource = remember { MutableInteractionSource() }
     Slider(
         value = value,
@@ -739,10 +743,10 @@ fun MiuixSlider(
         thumb = {
             Box(
                 modifier = Modifier
-                    .size(22.dp)
-                    .shadow(3.dp, CircleShape)
+                    .size(20.dp)
+                    .shadow(4.dp, CircleShape)
                     .background(Color.White, CircleShape)
-                    .border(2.5.dp, colors.primary, CircleShape)
+                    .border(2.dp, colors.primary, CircleShape)
             )
         },
         track = { sliderState ->
@@ -752,14 +756,14 @@ fun MiuixSlider(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(10.dp)
+                    .height(5.dp)
                     .clip(CircleShape)
                     .background(colors.surfaceHighlight)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(fraction)
-                        .height(10.dp)
+                        .height(5.dp)
                         .clip(CircleShape)
                         .background(colors.primary)
                 )
@@ -769,7 +773,7 @@ fun MiuixSlider(
 }
 
 @Composable
-fun MiuixDialog(
+fun CouiDialog(
     onDismissRequest: () -> Unit,
     title: String,
     modifier: Modifier = Modifier,
@@ -777,34 +781,34 @@ fun MiuixDialog(
     content: @Composable ColumnScope.() -> Unit,
     buttons: @Composable RowScope.() -> Unit
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
             modifier = modifier
-                .padding(horizontal = 20.dp, vertical = 24.dp)
-                .widthIn(max = 460.dp)
+                .padding(horizontal = 24.dp, vertical = 24.dp)
+                .widthIn(max = 440.dp)
                 .fillMaxWidth(),
-            shape = MiuixDialogShape,
+            shape = CouiDialogShape,
             color = colors.surface,
             tonalElevation = 0.dp,
-            shadowElevation = 12.dp
+            shadowElevation = 16.dp,
+            border = BorderStroke(0.5.dp, colors.cardBorder)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(22.dp)
+                    .padding(24.dp)
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
                     color = colors.textPrimary
                 )
                 if (!subtitle.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
@@ -813,7 +817,7 @@ fun MiuixDialog(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 content()
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(22.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -826,28 +830,28 @@ fun MiuixDialog(
 }
 
 @Composable
-fun MiuixDropdownMenu(
+fun CouiDropdownMenu(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
         shape = RoundedCornerShape(16.dp),
         containerColor = colors.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
-        border = BorderStroke(0.5.dp, colors.divider),
+        shadowElevation = 10.dp,
+        border = BorderStroke(0.5.dp, colors.cardBorder),
         modifier = modifier,
         content = content
     )
 }
 
 @Composable
-fun MiuixDropdownMenuItem(
+fun CouiDropdownMenuItem(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -856,7 +860,7 @@ fun MiuixDropdownMenuItem(
     isDestructive: Boolean = false,
     leadingIcon: ImageVector? = null
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     val textColor = when {
         isDestructive -> colors.error
         selected -> colors.primary
@@ -865,14 +869,14 @@ fun MiuixDropdownMenuItem(
 
     DropdownMenuItem(
         modifier = modifier.background(
-            if (selected) colors.primaryContainer.copy(alpha = 0.45f) else Color.Transparent
+            if (selected) colors.primaryContainer.copy(alpha = 0.55f) else Color.Transparent
         ),
         text = {
             Column {
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
                     color = textColor
                 )
                 if (!subtitle.isNullOrBlank()) {
@@ -909,35 +913,91 @@ fun MiuixDropdownMenuItem(
 }
 
 @Composable
-fun MiuixNavigationBar(
+fun CouiNavigationBar(
+    selectedIndex: Int,
+    itemCount: Int,
     modifier: Modifier = Modifier,
+    dragPosition: Float? = null,
     content: @Composable RowScope.() -> Unit
 ) {
-    val colors = MiuixTheme.colors
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = colors.navBar,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+    val colors = CouiTheme.colors
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
+        contentAlignment = Alignment.Center
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            HorizontalDivider(thickness = 0.5.dp, color = colors.divider)
-            Row(
+        Box(
+            modifier = Modifier
+                .widthIn(max = 760.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .height(62.dp)
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically,
-                content = content
-            )
+                    .shadow(
+                        elevation = 12.dp,
+                        shape = CircleShape,
+                        ambientColor = Color.Black.copy(alpha = if (colors.isDark) 0.14f else 0.07f),
+                        spotColor = Color.Black.copy(alpha = if (colors.isDark) 0.20f else 0.11f)
+                    ),
+                shape = CircleShape,
+                color = colors.navBar.copy(alpha = if (colors.isDark) 0.94f else 0.97f),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border = BorderStroke(
+                    width = if (colors.isDark) 0.6.dp else 0.5.dp,
+                    color = if (colors.isDark) colors.cardBorder else Color.Black.copy(alpha = 0.04f)
+                )
+            ) {
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .padding(horizontal = 6.dp)
+                ) {
+                    val safeCount = itemCount.coerceAtLeast(1)
+                    val tabWidth = maxWidth / safeCount
+                    val clampedIndex = selectedIndex.coerceIn(0, safeCount - 1)
+                    val animatedOffset by animateDpAsState(
+                        targetValue = tabWidth * clampedIndex,
+                        animationSpec = spring(
+                            dampingRatio = 0.84f,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "couiNavIndicatorOffset"
+                    )
+                    val indicatorOffset = if (dragPosition != null) {
+                        tabWidth * dragPosition.coerceIn(0f, (safeCount - 1).toFloat())
+                    } else {
+                        animatedOffset
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .offset(x = indicatorOffset)
+                            .width(tabWidth)
+                            .fillMaxHeight()
+                            .padding(horizontal = 3.dp, vertical = 5.dp)
+                            .clip(CircleShape)
+                            .background(colors.primaryContainer)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = content
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-fun RowScope.MiuixNavigationItem(
+fun RowScope.CouiNavigationItem(
     selected: Boolean,
     onClick: () -> Unit,
     icon: ImageVector,
@@ -945,86 +1005,105 @@ fun RowScope.MiuixNavigationItem(
     label: String,
     modifier: Modifier = Modifier
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     val tint by animateColorAsState(
         targetValue = if (selected) colors.primary else colors.textSecondary,
-        animationSpec = tween(160),
-        label = "navTint"
+        animationSpec = tween(200),
+        label = "couiNavTint"
     )
     val scale by animateFloatAsState(
-        targetValue = if (selected) 1.08f else 1.0f,
+        targetValue = if (selected) 1.06f else 1.0f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
+            dampingRatio = 0.72f,
             stiffness = Spring.StiffnessMedium
         ),
-        label = "navScale"
+        label = "couiNavScale"
     )
 
-    Column(
+    Box(
         modifier = modifier
             .weight(1f)
+            .fillMaxHeight()
             .minimumInteractiveComponentSize()
-            .clip(RoundedCornerShape(14.dp))
+            .padding(horizontal = 3.dp, vertical = 5.dp)
+            .clip(CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
                 role = Role.Tab
-            )
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = if (selected) selectedIcon else icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier
-                .size(23.dp)
-                .scale(scale)
-        )
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            color = tint,
-            maxLines = 1
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Crossfade(
+                targetState = selected,
+                animationSpec = tween(180),
+                label = "couiNavIconFade"
+            ) { isSelected ->
+                Icon(
+                    imageVector = if (isSelected) selectedIcon else icon,
+                    contentDescription = label,
+                    tint = tint,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .scale(scale)
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                color = tint,
+                maxLines = 1
+            )
+        }
     }
 }
 
 @Composable
-fun MiuixBentoMetricCard(
+fun CouiBentoMetricCard(
     label: String,
     value: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    minHeight: Dp = 84.dp
+    minHeight: Dp = 76.dp
 ) {
-    val colors = MiuixTheme.colors
-    MiuixCard(
+    val colors = CouiTheme.colors
+    CouiCard(
         modifier = modifier,
         onClick = onClick
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = minHeight)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.textSecondary
+                    text = value,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontFeatureSettings = "tnum"
+                    ),
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                     contentDescription = null,
@@ -1032,33 +1111,26 @@ fun MiuixBentoMetricCard(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }
 
 @Composable
-fun MiuixBentoActionCard(
+fun CouiBentoActionCard(
     title: String,
     icon: ImageVector,
     isPrimary: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    minHeight: Dp = 84.dp
+    minHeight: Dp = 76.dp
 ) {
-    val colors = MiuixTheme.colors
+    val colors = CouiTheme.colors
     val containerColor = if (isPrimary) colors.primary else colors.surface
     val contentColor = if (isPrimary) colors.onPrimary else colors.textPrimary
-    val iconBg = if (isPrimary) Color.White.copy(alpha = 0.2f) else colors.surfaceSecondary
+    val iconTint = if (isPrimary) colors.onPrimary else colors.primary
+    val iconBg = if (isPrimary) Color.White.copy(alpha = 0.2f) else colors.primaryContainer
 
-    MiuixCard(
+    CouiCard(
         modifier = modifier,
         containerColor = containerColor,
         onClick = onClick
@@ -1073,7 +1145,7 @@ fun MiuixBentoActionCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
                     .background(iconBg),
                 contentAlignment = Alignment.Center
@@ -1081,15 +1153,14 @@ fun MiuixBentoActionCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(18.dp)
+                    tint = iconTint,
+                    modifier = Modifier.size(17.dp)
                 )
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
                 color = contentColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1097,4 +1168,3 @@ fun MiuixBentoActionCard(
         }
     }
 }
-
