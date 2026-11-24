@@ -68,19 +68,16 @@ jobs:
             echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
             echo "KEYSTORE_PATH=${{ github.workspace }}/my-upload-key.jks" >> $GITHUB_ENV
           else
-            echo "No custom signing key found in secrets. Generating a temporary signing key for this build..."
-            keytool -genkeypair -v \
+            echo "No custom signing key found in secrets. Using fixed repository keystore for consistent upgrades..."
+            base64 -d debug.keystore.base64 > "${{ github.workspace }}/my-upload-key.jks"
+            keytool -changealias \
               -keystore "${{ github.workspace }}/my-upload-key.jks" \
-              -alias upload \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=TTS Server, OU=App, O=TTS, L=Beijing, S=Beijing, C=CN" \
-              -storepass "temp_password" \
-              -keypass "temp_password"
-            
-            echo "STORE_PASSWORD=temp_password" >> $GITHUB_ENV
-            echo "KEY_PASSWORD=temp_password" >> $GITHUB_ENV
+              -alias androiddebugkey \
+              -destalias upload \
+              -storepass android \
+              -keypass android
+            echo "STORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=android" >> $GITHUB_ENV
             echo "KEYSTORE_PATH=${{ github.workspace }}/my-upload-key.jks" >> $GITHUB_ENV
           fi
 
