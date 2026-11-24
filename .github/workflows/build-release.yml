@@ -50,6 +50,7 @@ jobs:
           fi
 
           echo "Calculated next version: $NEW_VERSION"
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
 
@@ -155,11 +156,45 @@ jobs:
           
           echo "UNIVERSAL_APK_PATH=$NEW_NAME" >> $GITHUB_ENV
 
+      - name: Generate Release Notes
+        run: |
+          git fetch --tags --force >/dev/null 2>&1 || true
+
+          COMMITS=""
+          if [ -n "${{ env.LATEST_TAG }}" ] && git rev-parse --verify "${{ env.LATEST_TAG }}" >/dev/null 2>&1; then
+            COMMITS=$(git log "${{ env.LATEST_TAG }}..HEAD" --no-merges --pretty=format:"- %s (%h)")
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS=$(git log -n 10 --no-merges --pretty=format:"- %s (%h)" 2>/dev/null || true)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- 常规功能更新与稳定性优化"
+          fi
+
+          APK_SIZE=$(du -h "${{ env.UNIVERSAL_APK_PATH }}" | cut -f1)
+          APK_SHA256=$(sha256sum "${{ env.UNIVERSAL_APK_PATH }}" | awk '{print $1}')
+
+          {
+            echo "## 更新内容"
+            echo ""
+            printf '%s\n' "$COMMITS"
+            echo ""
+            echo "## 构建信息"
+            echo "- 版本号：\`v${{ env.NEW_VERSION }}\` (versionCode: \`${{ env.VERSION_CODE }}\`)"
+            echo "- 安装包大小：\`${APK_SIZE}\`"
+            echo "- SHA-256：\`${APK_SHA256}\`"
+          } > release-notes.md
+
+          cat release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.NEW_VERSION }}
           name: v${{ env.NEW_VERSION }}
+          body_path: release-notes.md
           generate_release_notes: true
           files: |
             ${{ env.UNIVERSAL_APK_PATH }}
