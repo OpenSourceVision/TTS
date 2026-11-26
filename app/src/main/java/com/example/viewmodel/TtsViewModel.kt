@@ -323,6 +323,9 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
     private fun buildLegadoConfigJson(ip: String, port: Int): String {
         val requestOptions = org.json.JSONObject().apply {
             put("method", "POST")
+            put("headers", org.json.JSONObject().apply {
+                put("Content-Type", "text/plain; charset=utf-8")
+            })
             put("body", "text={{java.encodeURI(speakText)}}")
         }.toString().replace("\\/", "/")
 

@@ -91,4 +91,14 @@ class TtsSynthesisHelperTest {
         assertEquals("1.25", parsed["rate"])
         assertEquals("1.0", parsed["pitch"])
     }
+
+    @Test
+    fun decodeIfStillUrlEncoded_recoversDoubleEncodedTitleWithoutTouchingNormalText() {
+        assertEquals(
+            "第365章  逃走了",
+            TtsSynthesisHelper.decodeIfStillUrlEncoded("%E7%AC%AC365%E7%AB%A0++%E9%80%83%E8%B5%B0%E4%BA%86")
+        )
+        assertEquals("准确率99%以上", TtsSynthesisHelper.decodeIfStillUrlEncoded("准确率99%以上"))
+        assertEquals("1+1=2", TtsSynthesisHelper.decodeIfStillUrlEncoded("1+1=2"))
+    }
 }

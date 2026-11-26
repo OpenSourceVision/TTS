@@ -23,6 +23,20 @@ object TtsSynthesisHelper {
         "engine", "e"
     )
 
+    private val CONSECUTIVE_PERCENT_HEX_REGEX = Regex("(?:%[0-9A-Fa-f]{2}){2,}")
+
+    fun decodeIfStillUrlEncoded(text: String): String {
+        if (!CONSECUTIVE_PERCENT_HEX_REGEX.containsMatchIn(text)) {
+            return text
+        }
+        return try {
+            val decoded = URLDecoder.decode(text, "UTF-8")
+            if (decoded != text && !decoded.contains('\uFFFD')) decoded else text
+        } catch (_: Exception) {
+            text
+        }
+    }
+
     fun cleanAndSanitizeText(raw: String): String {
         return raw
             .replace(Regex("[\u200B-\u200D\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F]"), "")

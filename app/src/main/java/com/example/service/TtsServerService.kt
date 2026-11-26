@@ -387,7 +387,8 @@ class TtsServerService : Service() {
                 }
 
                 // 字段别名完全保持一致
-                text = params["text"] ?: params["key"] ?: params["t"] ?: params["txt"] ?: params["speakText"] ?: ""
+                val rawExtractedText = params["text"] ?: params["key"] ?: params["t"] ?: params["txt"] ?: params["speakText"] ?: ""
+                text = TtsSynthesisHelper.decodeIfStillUrlEncoded(rawExtractedText)
                 if (text.isEmpty()) {
                     val duration = System.currentTimeMillis() - startTime
                     logToDatabase("(Empty text parameter)", "System", "FAILED", duration, "Error: 'text' or 'key' parameter is required.", null)

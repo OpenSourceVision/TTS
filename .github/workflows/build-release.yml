@@ -162,29 +162,24 @@ jobs:
 
           COMMITS=""
           if [ -n "${{ env.LATEST_TAG }}" ] && git rev-parse --verify "${{ env.LATEST_TAG }}" >/dev/null 2>&1; then
-            COMMITS=$(git log "${{ env.LATEST_TAG }}..HEAD" --no-merges --pretty=format:"- %s (%h)")
+            COMMITS=$(git log "${{ env.LATEST_TAG }}..HEAD" -n 5 --no-merges --pretty=format:"- %s" | awk '!seen[$0]++')
           fi
 
           if [ -z "$COMMITS" ]; then
-            COMMITS=$(git log -n 10 --no-merges --pretty=format:"- %s (%h)" 2>/dev/null || true)
+            COMMITS=$(git log -n 3 --no-merges --pretty=format:"- %s" 2>/dev/null | awk '!seen[$0]++' || true)
           fi
 
           if [ -z "$COMMITS" ]; then
-            COMMITS="- 常规功能更新与稳定性优化"
+            COMMITS="- 常规优化与问题修复"
           fi
 
           APK_SIZE=$(du -h "${{ env.UNIVERSAL_APK_PATH }}" | cut -f1)
-          APK_SHA256=$(sha256sum "${{ env.UNIVERSAL_APK_PATH }}" | awk '{print $1}')
 
           {
-            echo "## 更新内容"
-            echo ""
+            echo "**更新内容**"
             printf '%s\n' "$COMMITS"
             echo ""
-            echo "## 构建信息"
-            echo "- 版本号：\`v${{ env.NEW_VERSION }}\` (versionCode: \`${{ env.VERSION_CODE }}\`)"
-            echo "- 安装包大小：\`${APK_SIZE}\`"
-            echo "- SHA-256：\`${APK_SHA256}\`"
+            echo "> 版本 \`v${{ env.NEW_VERSION }}\` · 大小 \`${APK_SIZE}\`"
           } > release-notes.md
 
           cat release-notes.md
@@ -195,7 +190,7 @@ jobs:
           tag_name: v${{ env.NEW_VERSION }}
           name: v${{ env.NEW_VERSION }}
           body_path: release-notes.md
-          generate_release_notes: true
+          generate_release_notes: false
           files: |
             ${{ env.UNIVERSAL_APK_PATH }}
           token: ${{ github.token }}
