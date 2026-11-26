@@ -59,8 +59,6 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
-import java.io.FileInputStream
-import java.net.URLDecoder
 import java.util.Locale
 
 class TtsServerService : Service() {
@@ -330,9 +328,11 @@ class TtsServerService : Service() {
 
         try {
             requestSemaphore.withPermit {
-                // 【关键改动6】：64KB 请求体大小限制拦截（优先检查 Header，超过则直接报 400）
+                // 【关键改动6】：64KB 请求体大小限制拦截（优先检查 Header，超过则直接报 400 并记入日志）
                 val contentLength = call.request.contentLength() ?: 0L
                 if (contentLength > 65536) {
+                    val duration = System.currentTimeMillis() - startTime
+                    logToDatabase("HTTP Request ($contentLength bytes)", "System", "FAILED", duration, "Request Body Too Large (Max 64KB)", null)
                     call.respondText("Request Body Too Large (Max 64KB)", status = HttpStatusCode.BadRequest)
                     return@withPermit
                 }
@@ -351,6 +351,8 @@ class TtsServerService : Service() {
                 }
 
                 if (requestBody.toByteArray(Charsets.UTF_8).size > 65536) {
+                    val duration = System.currentTimeMillis() - startTime
+                    logToDatabase("HTTP Request", "System", "FAILED", duration, "Request Body Too Large (Max 64KB)", null)
                     call.respondText("Request Body Too Large (Max 64KB)", status = HttpStatusCode.BadRequest)
                     return@withPermit
                 }
@@ -377,7 +379,7 @@ class TtsServerService : Service() {
                             // Not valid JSON
                         }
                     } else if (trimmedBody.contains("=")) {
-                        params.putAll(parseQueryParams(trimmedBody))
+                        params.putAll(TtsSynthesisHelper.parseQueryParams(trimmedBody))
                     } else {
                         // 如果 POST Body 直接是纯文本（阅读 App 常用配置），直接作为朗读文本
                         params["text"] = trimmedBody
@@ -387,6 +389,8 @@ class TtsServerService : Service() {
                 // 字段别名完全保持一致
                 text = params["text"] ?: params["key"] ?: params["t"] ?: params["txt"] ?: params["speakText"] ?: ""
                 if (text.isEmpty()) {
+                    val duration = System.currentTimeMillis() - startTime
+                    logToDatabase("(Empty text parameter)", "System", "FAILED", duration, "Error: 'text' or 'key' parameter is required.", null)
                     call.respondText("Error: 'text' or 'key' parameter is required.", status = HttpStatusCode.BadRequest)
                     return@withPermit
                 }
@@ -394,7 +398,7 @@ class TtsServerService : Service() {
                 val db = AppDatabase.getDatabase(applicationContext)
                 val originalText = text
                 val ruleResult = processTextRules(originalText, db)
-                text = cleanAndSanitizeText(ruleResult.processedText)
+                text = TtsSynthesisHelper.cleanAndSanitizeText(ruleResult.processedText)
                 val hitsJson = ruleResult.hits.toHitsJsonString()
 
                 val settings = db.appDao().getSettings() ?: SettingsEntity()
@@ -409,7 +413,7 @@ class TtsServerService : Service() {
                 val pitch = normalizePitch(rawPitch)
                 enginePackage = params["engine"] ?: params["e"] ?: settings.targetEnginePackage
 
-                if (!isSpeakableText(text)) {
+                if (!TtsSynthesisHelper.isSpeakableText(text)) {
                     val duration = System.currentTimeMillis() - startTime
                     logToDatabase(originalText, enginePackage, "SUCCESS", duration, "Text is empty or contains only punctuation/symbols (returned silence audio)", hitsJson)
                     val silenceWav = getSilenceWav()
@@ -417,36 +421,23 @@ class TtsServerService : Service() {
                     return@withPermit
                 }
 
-                val resultPair = withTimeoutOrNull(30000) {
+                val resultPair = withTimeoutOrNull(60000) {
                     synthesisMutex.withLock {
                         synthesizeText(text, rate, pitch, enginePackage)
                     }
                 }
-                val (audioFile, errorDetails) = resultPair ?: Pair(null, "Server synthesis queue timeout (30s)")
+                val (audioBytes, errorDetails) = resultPair ?: Pair(null, "Server synthesis queue timeout (60s)")
 
-                if (audioFile == null || !audioFile.exists()) {
+                if (audioBytes == null || !TtsSynthesisHelper.isValidWav(audioBytes)) {
                     val duration = System.currentTimeMillis() - startTime
-                    val errorMsg = errorDetails ?: "Synthesis failed for text: $text"
+                    val errorMsg = errorDetails ?: "Synthesis failed or returned invalid WAV for text: $text"
                     logToDatabase(originalText, enginePackage, "FAILED", duration, errorMsg, hitsJson)
                     call.respondText("Error: Failed to synthesize audio. ($errorMsg)", status = HttpStatusCode.InternalServerError)
                     return@withPermit
                 }
 
                 try {
-                    val fileBytes = try {
-                        audioFile.readBytes()
-                    } finally {
-                        try { audioFile.delete() } catch (e: Throwable) {}
-                    }
-
-                    if (fileBytes.size <= 44) {
-                        val duration = System.currentTimeMillis() - startTime
-                        logToDatabase(originalText, enginePackage, "FAILED", duration, "Audio file is empty or invalid header only (${fileBytes.size} bytes)", hitsJson)
-                        call.respondText("Error: Synthesized audio is empty.", status = HttpStatusCode.InternalServerError)
-                        return@withPermit
-                    }
-
-                    call.respondBytes(fileBytes, ContentType("audio", "wav"))
+                    call.respondBytes(audioBytes, ContentType("audio", "wav"))
 
                     val duration = System.currentTimeMillis() - startTime
                     logToDatabase(originalText, enginePackage, "SUCCESS", duration, null, hitsJson)
@@ -493,29 +484,7 @@ class TtsServerService : Service() {
         }
     }
 
-    private fun cleanAndSanitizeText(raw: String): String {
-        return raw
-            .replace(Regex("[\u200B-\u200D\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F]"), "")
-            .replace(Regex("^[\\s\\u3000]+|[\\s\\u3000]+$"), "")
-            .trim()
-    }
 
-    private fun isSpeakableText(text: String): Boolean {
-        if (text.isBlank()) return false
-        for (ch in text) {
-            if (Character.isLetterOrDigit(ch)) return true
-            val block = Character.UnicodeBlock.of(ch)
-            if (block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS ||
-                block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A ||
-                block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS ||
-                block == Character.UnicodeBlock.HIRAGANA ||
-                block == Character.UnicodeBlock.KATAKANA ||
-                block == Character.UnicodeBlock.HANGUL_SYLLABLES) {
-                return true
-            }
-        }
-        return false
-    }
 
     private var cachedSilenceWav: ByteArray? = null
 
@@ -577,40 +546,23 @@ class TtsServerService : Service() {
                 override fun onStart(id: String) {}
 
                 override fun onDone(id: String) {
-                    val deferred = pendingUtterances.remove(id)
-                    if (deferred != null) {
-                        deferred.complete(true)
-                    } else if (pendingUtterances.size == 1) {
-                        val singleEntry = pendingUtterances.entries.firstOrNull()
-                        if (singleEntry != null) {
-                            pendingUtterances.remove(singleEntry.key)?.complete(true)
-                        }
-                    }
+                    // 严格按 utteranceId 精确匹配，避免超时或被取消的旧请求回调误唤醒后续请求
+                    pendingUtterances.remove(id)?.complete(true)
                 }
 
-                override fun onError(id: String) {
-                    val deferred = pendingUtterances.remove(id)
-                    if (deferred != null) {
-                        deferred.complete(false)
-                    } else if (pendingUtterances.size == 1) {
-                        val singleEntry = pendingUtterances.entries.firstOrNull()
-                        if (singleEntry != null) {
-                            pendingUtterances.remove(singleEntry.key)?.complete(false)
-                        }
+                override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    if (utteranceId != null) {
+                        pendingUtterances.remove(utteranceId)?.complete(false)
                     }
                 }
 
                 @Deprecated("Deprecated in Java")
+                override fun onError(id: String) {
+                    pendingUtterances.remove(id)?.complete(false)
+                }
+
                 override fun onError(id: String, errorCode: Int) {
-                    val deferred = pendingUtterances.remove(id)
-                    if (deferred != null) {
-                        deferred.complete(false)
-                    } else if (pendingUtterances.size == 1) {
-                        val singleEntry = pendingUtterances.entries.firstOrNull()
-                        if (singleEntry != null) {
-                            pendingUtterances.remove(singleEntry.key)?.complete(false)
-                        }
-                    }
+                    pendingUtterances.remove(id)?.complete(false)
                 }
             })
         } catch (e: Throwable) {
@@ -621,7 +573,7 @@ class TtsServerService : Service() {
     private suspend fun handleSynthesizeFailure(
         tempFile: File?,
         errorMsg: String
-    ): Pair<File?, String?> {
+    ): Pair<ByteArray?, String?> {
         // 1. 尝试删除孤儿临时文件
         if (tempFile != null && tempFile.exists()) {
             try { tempFile.delete() } catch (e: Throwable) {}
@@ -665,20 +617,38 @@ class TtsServerService : Service() {
         rate: Float,
         pitch: Float,
         enginePackage: String
-    ): Pair<File?, String?> {
-        var lastError: String? = null
-        for (attempt in 1..2) {
-            val (file, err) = performSingleSynthesis(text, rate, pitch, enginePackage)
-            if (file != null && file.exists() && file.length() > 44) {
-                consecutiveFailureCount.set(0)
-                return Pair(file, null)
-            }
-            lastError = err
-            if (attempt == 1) {
-                kotlinx.coroutines.delay(200)
-            }
+    ): Pair<ByteArray?, String?> {
+        val chunks = TtsSynthesisHelper.splitTextForSynthesis(text, maxChunkLength = 200)
+        if (chunks.isEmpty()) {
+            return Pair(getSilenceWav(), null)
         }
-        return handleSynthesizeFailure(null, lastError ?: "Synthesized audio file missing or empty after retry")
+
+        val chunkWavs = mutableListOf<ByteArray>()
+        for (chunk in chunks) {
+            var synthesizedChunk: ByteArray? = null
+            var lastError: String? = null
+            for (attempt in 1..2) {
+                val (wavBytes, err) = performSingleSynthesis(chunk, rate, pitch, enginePackage)
+                if (wavBytes != null && TtsSynthesisHelper.isValidWav(wavBytes)) {
+                    synthesizedChunk = wavBytes
+                    break
+                }
+                lastError = err
+                if (attempt == 1) {
+                    delay(200)
+                }
+            }
+            if (synthesizedChunk == null) {
+                return handleSynthesizeFailure(null, lastError ?: "Synthesized audio missing or invalid after retry")
+            }
+            chunkWavs.add(synthesizedChunk)
+        }
+
+        val merged = TtsSynthesisHelper.mergeWavChunks(chunkWavs)
+            ?: return handleSynthesizeFailure(null, "Failed to merge synthesized WAV chunks (${chunkWavs.size} parts)")
+
+        consecutiveFailureCount.set(0)
+        return Pair(merged, null)
     }
 
     private suspend fun performSingleSynthesis(
@@ -686,7 +656,7 @@ class TtsServerService : Service() {
         rate: Float,
         pitch: Float,
         enginePackage: String
-    ): Pair<File?, String?> {
+    ): Pair<ByteArray?, String?> {
         var errorDetails: String? = null
 
         val tts = try {
@@ -708,114 +678,116 @@ class TtsServerService : Service() {
         val deferredResult = CompletableDeferred<Boolean>()
         pendingUtterances[utteranceId] = deferredResult
 
-        val bundle = Bundle()
         try {
-            bundle.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
-        } catch (e: Throwable) {
-            // ignore bundle write errors
-        }
-
-        val synthResult = withContext(Dispatchers.Main) {
+            val bundle = Bundle()
             try {
-                // 设置语言 (加 try-catch 保护)
-                try {
-                    val hasChinese = text.any { it.code in 0x4E00..0x9FFF }
-                    if (hasChinese) {
-                        val result = tts.setLanguage(Locale.SIMPLIFIED_CHINESE)
-                        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                            tts.setLanguage(Locale.CHINESE)
-                        }
-                    } else {
-                        tts.setLanguage(Locale.getDefault())
-                    }
-                } catch (e: Throwable) {
-                    if (errorDetails == null) {
-                        errorDetails = "setLanguage error: ${e.javaClass.name}: ${e.message}"
-                    }
-                }
-
-                // 设置语速和音调 (加 try-catch 保护)
-                try {
-                    tts.setSpeechRate(rate)
-                } catch (e: Throwable) {
-                    if (errorDetails == null) {
-                        errorDetails = "setSpeechRate error: ${e.javaClass.name}: ${e.message}"
-                    }
-                }
-
-                try {
-                    tts.setPitch(pitch)
-                } catch (e: Throwable) {
-                    if (errorDetails == null) {
-                        errorDetails = "setPitch error: ${e.javaClass.name}: ${e.message}"
-                    }
-                }
-
-                // 合成音频文件 (加 try-catch 保护)
-                tts.synthesizeToFile(text, bundle, tempFile, utteranceId)
+                bundle.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
             } catch (e: Throwable) {
-                errorDetails = "synthesizeToFile exception: ${e.javaClass.name}: ${e.message}"
-                TextToSpeech.ERROR
+                // ignore bundle write errors
             }
-        }
 
-        if (synthResult == TextToSpeech.ERROR) {
-            pendingUtterances.remove(utteranceId)
-            try { tempFile.delete() } catch (e: Throwable) {}
-            return Pair(null, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
-        }
+            val synthResult = withContext(Dispatchers.Main) {
+                try {
+                    // 设置语言 (加 try-catch 保护)
+                    try {
+                        val hasChinese = text.any { it.code in 0x4E00..0x9FFF }
+                        if (hasChinese) {
+                            val result = tts.setLanguage(Locale.SIMPLIFIED_CHINESE)
+                            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                                tts.setLanguage(Locale.CHINESE)
+                            }
+                        } else {
+                            tts.setLanguage(Locale.getDefault())
+                        }
+                    } catch (e: Throwable) {
+                        if (errorDetails == null) {
+                            errorDetails = "setLanguage error: ${e.javaClass.name}: ${e.message}"
+                        }
+                    }
 
-        // 使用 withTimeoutOrNull (10秒) 进行单次合成超时保护，避免阻塞客户端并发队列
-        val waitResult = try {
-            withTimeoutOrNull(10000) {
-                deferredResult.await()
+                    // 设置语速和音调 (加 try-catch 保护)
+                    try {
+                        tts.setSpeechRate(rate)
+                    } catch (e: Throwable) {
+                        if (errorDetails == null) {
+                            errorDetails = "setSpeechRate error: ${e.javaClass.name}: ${e.message}"
+                        }
+                    }
+
+                    try {
+                        tts.setPitch(pitch)
+                    } catch (e: Throwable) {
+                        if (errorDetails == null) {
+                            errorDetails = "setPitch error: ${e.javaClass.name}: ${e.message}"
+                        }
+                    }
+
+                    // 合成音频文件 (加 try-catch 保护)
+                    tts.synthesizeToFile(text, bundle, tempFile, utteranceId)
+                } catch (e: Throwable) {
+                    errorDetails = "synthesizeToFile exception: ${e.javaClass.name}: ${e.message}"
+                    TextToSpeech.ERROR
+                }
             }
-        } catch (e: Throwable) {
-            if (errorDetails == null) {
-                errorDetails = "deferredResult await exception: ${e.javaClass.name}: ${e.message}"
+
+            if (synthResult == TextToSpeech.ERROR) {
+                return Pair(null, errorDetails ?: "TextToSpeech.ERROR returned from synthesizeToFile")
             }
-            null
+
+            // 单次合成严格遵守 10 秒超时上限；超时未收到 onDone 必须中止并拒绝返回残缺文件
+            val waitResult = try {
+                withTimeoutOrNull(10000) {
+                    deferredResult.await()
+                }
+            } catch (e: Throwable) {
+                if (errorDetails == null) {
+                    errorDetails = "deferredResult await exception: ${e.javaClass.name}: ${e.message}"
+                }
+                null
+            }
+
+            if (waitResult == null) {
+                withContext(Dispatchers.Main) {
+                    try {
+                        tts.stop()
+                    } catch (e: Throwable) {
+                        e.printStackTrace()
+                    }
+                }
+                return Pair(null, errorDetails ?: "UtteranceListener timeout (10s), tts.stop() invoked")
+            }
+
+            if (waitResult == false) {
+                return Pair(null, errorDetails ?: "TTS engine returned onError/onStop callback for utterance")
+            }
+
+            // 收到明确的 onDone 回调后，若文件处于落盘临界状态，最多轮询等待 300ms
+            var fileValid = tempFile.exists() && tempFile.length() > 44
+            if (!fileValid) {
+                for (i in 1..6) {
+                    delay(50)
+                    if (tempFile.exists() && tempFile.length() > 44) {
+                        fileValid = true
+                        break
+                    }
+                }
+            }
+
+            if (!fileValid) {
+                return Pair(null, errorDetails ?: "Synthesized audio file missing or empty (<=44 bytes)")
+            }
+
+            val bytes = tempFile.readBytes()
+            return if (TtsSynthesisHelper.isValidWav(bytes)) {
+                Pair(bytes, null)
+            } else {
+                Pair(null, errorDetails ?: "Synthesized WAV header or payload invalid (${bytes.size} bytes)")
+            }
         } finally {
             pendingUtterances.remove(utteranceId)
-        }
-
-        // 如果明确收到 onError 回调，直接报错并清理
-        if (waitResult == false) {
-            try { tempFile.delete() } catch (e: Throwable) {}
-            return Pair(null, errorDetails ?: "TTS engine returned onError callback for utterance")
-        }
-
-        // 确保引擎文件落盘完成：如果收到 onDone 但文件大小尚未刷新，进行极短的轮询等待 (最多 300ms)
-        var fileValid = tempFile.exists() && tempFile.length() > 44
-        if (waitResult == true && !fileValid) {
-            for (i in 1..6) {
-                kotlinx.coroutines.delay(50)
-                if (tempFile.exists() && tempFile.length() > 44) {
-                    fileValid = true
-                    break
-                }
-            }
-        }
-
-        if (waitResult == null && !fileValid) {
-            // 超时时在 Main 线程主动调用 tts.stop()，打断并清空 TTS 引擎内部任务队列
-            withContext(Dispatchers.Main) {
-                try {
-                    tts.stop()
-                } catch (e: Throwable) {
-                    e.printStackTrace()
-                }
-            }
-            if (errorDetails == null) {
-                errorDetails = "UtteranceListener timeout (10s), tts.stop() invoked"
-            }
-        }
-
-        return if (fileValid) {
-            Pair(tempFile, null)
-        } else {
-            try { tempFile.delete() } catch (e: Throwable) {}
-            Pair(null, errorDetails ?: "Synthesized audio file missing or empty (<=44 bytes)")
+            try {
+                if (tempFile.exists()) tempFile.delete()
+            } catch (_: Throwable) {}
         }
     }
 
@@ -905,33 +877,7 @@ class TtsServerService : Service() {
         }
     }
 
-    private fun parseQueryParams(query: String?): Map<String, String> {
-        if (query.isNullOrEmpty()) return emptyMap()
-        val params = mutableMapOf<String, String>()
-        val pairs = query.split("&")
-        for (pair in pairs) {
-            val idx = pair.indexOf("=")
-            if (idx > 0) {
-                val rawKey = pair.substring(0, idx)
-                val rawValue = pair.substring(idx + 1)
 
-                val key = try {
-                    URLDecoder.decode(rawKey, "UTF-8")
-                } catch (e: Exception) {
-                    rawKey
-                }
-
-                val value = try {
-                    URLDecoder.decode(rawValue, "UTF-8")
-                } catch (e: Exception) {
-                    rawValue
-                }
-
-                params[key] = value
-            }
-        }
-        return params
-    }
 
     private suspend fun logToDatabase(
         text: String,

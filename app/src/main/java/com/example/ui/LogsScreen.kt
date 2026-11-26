@@ -158,26 +158,32 @@ fun LogsScreen(
             ) {
                 items(history, key = { it.id }) { log ->
                     val isCrash = log.status == "CRASH"
-                    val isSuccess = log.status == "SUCCESS"
+                    val isSilenceFallback = log.status == "SUCCESS" && !log.errorMsg.isNullOrBlank()
+                    val isSuccess = log.status == "SUCCESS" && !isSilenceFallback
                     val isPartial = log.status == "PARTIAL_SUCCESS"
+                    val isCancelled = log.status == "CANCELLED"
 
                     val statusColor = when {
                         isCrash -> colors.error
                         isSuccess -> colors.success
-                        isPartial -> colors.warning
+                        isSilenceFallback || isPartial -> colors.warning
+                        isCancelled -> colors.textSecondary
                         else -> colors.error
                     }
                     val statusContainer = when {
                         isCrash -> colors.errorContainer
                         isSuccess -> colors.successContainer
-                        isPartial -> colors.warningContainer
+                        isSilenceFallback || isPartial -> colors.warningContainer
+                        isCancelled -> colors.surfaceSecondary
                         else -> colors.errorContainer
                     }
-                    val statusText = when (log.status) {
-                        "CRASH" -> "崩溃"
-                        "SUCCESS" -> "成功"
-                        "PARTIAL_SUCCESS" -> "部分成功"
-                        "SENTENCE_FAILED" -> "跳过"
+                    val statusText = when {
+                        log.status == "CRASH" -> "崩溃"
+                        isSilenceFallback -> "静音"
+                        log.status == "SUCCESS" -> "成功"
+                        log.status == "PARTIAL_SUCCESS" -> "部分成功"
+                        log.status == "SENTENCE_FAILED" -> "跳过"
+                        log.status == "CANCELLED" -> "已中断"
                         else -> "失败"
                     }
 

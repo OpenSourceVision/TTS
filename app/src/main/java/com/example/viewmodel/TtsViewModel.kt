@@ -320,19 +320,26 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         }
     }
 
+    private fun buildLegadoConfigJson(ip: String, port: Int): String {
+        val requestOptions = org.json.JSONObject().apply {
+            put("method", "POST")
+            put("body", "text={{java.encodeURI(speakText)}}")
+        }.toString().replace("\\/", "/")
+
+        return org.json.JSONObject().apply {
+            put("name", "TTS转发")
+            put("url", "http://${ip}:${port}/api/tts,$requestOptions")
+            put("contentType", "audio/wav")
+            put("concurrentRate", "100")
+            put("id", System.currentTimeMillis())
+        }.toString(2).replace("\\/", "/")
+    }
+
     fun copyLegadoConfig(context: Context, ipType: String = "127.0.0.1") {
         viewModelScope.launch {
             val settings = settingsState.value
             val ip = if (ipType == "127.0.0.1") "127.0.0.1" else getWifiIpAddress(context)
-            
-            val json = """
-            {
-              "name": "TTS转发",
-              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}",
-              "contentType": "audio/wav",
-              "id": ${System.currentTimeMillis()}
-            }
-            """.trimIndent()
+            val json = buildLegadoConfigJson(ip, settings.port)
 
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("Legado TTS Config", json)
@@ -345,15 +352,7 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         viewModelScope.launch {
             val settings = settingsState.value
             val ip = if (ipType == "127.0.0.1") "127.0.0.1" else getWifiIpAddress(context)
-            
-            val json = """
-            {
-              "name": "TTS转发",
-              "url": "http://${ip}:${settings.port}/api/tts?text={{java.encodeURI(speakText)}}",
-              "contentType": "audio/wav",
-              "id": ${System.currentTimeMillis()}
-            }
-            """.trimIndent()
+            val json = buildLegadoConfigJson(ip, settings.port)
 
             try {
                 val encodedJson = java.net.URLEncoder.encode(json, "UTF-8")
