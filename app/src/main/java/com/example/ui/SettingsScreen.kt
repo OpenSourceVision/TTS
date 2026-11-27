@@ -51,6 +51,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
+import com.example.data.LocalBackupStorageHelper
 import com.example.ui.coui.CouiActionButton
 import com.example.ui.coui.CouiButtonVariant
 import com.example.ui.coui.CouiCard
@@ -68,9 +69,6 @@ import com.example.viewmodel.TtsViewModel
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 data class LanguageOption(val label: String, val language: String, val country: String)
 
@@ -258,27 +256,11 @@ fun SettingsScreen(
         CouiSectionTitle(text = "备份")
 
         val coroutineScope = rememberCoroutineScope()
-
-        val fileExportLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.CreateDocument("application/json")
-        ) { uri ->
-            if (uri != null) {
-                coroutineScope.launch {
-                    try {
-                        val jsonContent = viewModel.backupToLocalString()
-                        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                            outputStream.write(jsonContent.toByteArray(Charsets.UTF_8))
-                        }
-                        Toast.makeText(context, "导出成功", Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "导出失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
+        var isLocalBackingUp by remember { mutableStateOf(false) }
+        var isLocalRestoring by remember { mutableStateOf(false) }
 
         val fileImportLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.GetContent()
+            contract = ActivityResultContracts.OpenDocument()
         ) { uri ->
             if (uri != null) {
                 coroutineScope.launch {
@@ -310,10 +292,22 @@ fun SettingsScreen(
         CouiCard {
             CouiRow(
                 title = "本地备份",
-                endValue = "导出",
+                summary = "目录: ${LocalBackupStorageHelper.PUBLIC_BACKUP_DISPLAY_PATH}",
+                endValue = if (isLocalBackingUp) "备份中..." else "覆盖备份",
                 onClick = {
-                    val formattedDate = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                    fileExportLauncher.launch("TTS_Forwarder_Backup_$formattedDate.json")
+                    if (!isLocalBackingUp && !isLocalRestoring) {
+                        isLocalBackingUp = true
+                        viewModel.backupToLocalDefaultDir { result ->
+                            isLocalBackingUp = false
+                            if (result.isFailure) {
+                                Toast.makeText(
+                                    context,
+                                    "备份失败: ${result.exceptionOrNull()?.localizedMessage}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
                 },
                 modifier = Modifier.testTag("local_backup_button")
             )
@@ -322,9 +316,33 @@ fun SettingsScreen(
 
             CouiRow(
                 title = "本地恢复",
-                endValue = "导入",
+                summary = "直接从本地 TTS 目录读取并恢复",
+                endValue = if (isLocalRestoring) "恢复中..." else "直接恢复",
                 onClick = {
-                    fileImportLauncher.launch("application/json")
+                    if (!isLocalBackingUp && !isLocalRestoring) {
+                        isLocalRestoring = true
+                        viewModel.restoreFromLocalDefaultDir(
+                            onNotFound = {
+                                isLocalRestoring = false
+                                Toast.makeText(
+                                    context,
+                                    "未读取到默认 TTS 目录备份，请选择配置文件",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                fileImportLauncher.launch(arrayOf("application/json", "*/*"))
+                            },
+                            onResult = { result ->
+                                isLocalRestoring = false
+                                if (result.isFailure) {
+                                    Toast.makeText(
+                                        context,
+                                        "恢复失败: ${result.exceptionOrNull()?.localizedMessage}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        )
+                    }
                 },
                 modifier = Modifier.testTag("local_restore_button")
             )

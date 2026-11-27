@@ -4,7 +4,6 @@ import java.io.File
 import android.os.Build
 import android.os.Environment
 import android.content.ContentUris
-import android.content.ContentValues
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -24,6 +23,7 @@ import com.example.data.RuleGroupEntity
 import com.example.data.RuleEntity
 import com.example.data.RuleCache
 import com.example.data.TextRuleProcessor
+import com.example.data.LocalBackupStorageHelper
 import com.example.data.WebDavHelper
 import com.example.data.BackupPackage
 import com.example.data.WebDavConfigPackage
@@ -115,6 +115,9 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
     init {
         // Initialize default settings and preload polyphonic & default reading tables off the main thread
         viewModelScope.launch(Dispatchers.IO) {
+            // Ensure default local TTS backup directories exist
+            LocalBackupStorageHelper.ensureLocalTtsDirs(context)
+
             // Pre-warm tables in background to avoid future lookup lag
             com.example.data.PolyphonicTable.init(context)
             com.example.data.DefaultReadingTable.init(context)
@@ -989,6 +992,67 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
         }
     }
 
+    fun backupToLocalDefaultDir(onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val saveResult = withContext(Dispatchers.IO) {
+                    LocalBackupStorageHelper.ensureLocalTtsDirs(context)
+                    val jsonContent = backupToLocalString()
+                    if (jsonContent.isBlank()) {
+                        Result.failure(Exception("生成备份配置失败"))
+                    } else {
+                        LocalBackupStorageHelper.saveToTtsDirectory(
+                            context = context,
+                            content = jsonContent,
+                            fileName = LocalBackupStorageHelper.BACKUP_FILE_NAME
+                        )
+                    }
+                }
+                if (saveResult.isSuccess) {
+                    val path = saveResult.getOrThrow()
+                    _toastEvent.emit("已覆盖备份至 $path")
+                }
+                onResult(saveResult)
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun restoreFromLocalDefaultDir(
+        onNotFound: () -> Unit,
+        onResult: (Result<String>) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val found = withContext(Dispatchers.IO) {
+                    LocalBackupStorageHelper.ensureLocalTtsDirs(context)
+                    LocalBackupStorageHelper.readFromTtsDirectory(
+                        context = context,
+                        preferredFileNames = listOf(
+                            LocalBackupStorageHelper.BACKUP_FILE_NAME,
+                            LocalBackupStorageHelper.AUTO_BACKUP_FILE_NAME
+                        )
+                    )
+                }
+                if (found == null) {
+                    onNotFound()
+                    return@launch
+                }
+                val (content, source) = found
+                restoreFromLocalString(content) { restoreResult ->
+                    if (restoreResult.isSuccess) {
+                        onResult(Result.success(source))
+                    } else {
+                        onResult(Result.failure(restoreResult.exceptionOrNull() ?: Exception("恢复配置失败")))
+                    }
+                }
+            } catch (e: Exception) {
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
     fun restoreFromLocalString(jsonStr: String, onResult: (Result<Unit>) -> Unit) {
         viewModelScope.launch {
             try {
@@ -1101,83 +1165,12 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                     e.printStackTrace()
                 }
 
-                // 2. 保存到应用私有内部存储
-                try {
-                    File(context.filesDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-
-                // 3. 保存到应用专属外部存储
-                try {
-                    val extFilesDir = context.getExternalFilesDir(null)
-                    if (extFilesDir != null) {
-                        File(extFilesDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-
-                // 4. 保存到系统公开 Download 目录（Android 10+ 借助 MediaStore 写入，卸载重装仍保留）
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        val resolver = context.contentResolver
-                        val projection = arrayOf(MediaStore.MediaColumns._ID)
-                        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
-                        val selectionArgs = arrayOf("tts_rules_auto_backup.json")
-                        val existingUri = resolver.query(
-                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                            projection,
-                            selection,
-                            selectionArgs,
-                            null
-                        )?.use { cursor ->
-                            if (cursor.moveToFirst()) {
-                                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
-                                ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
-                            } else null
-                        }
-
-                        val targetUri = existingUri ?: run {
-                            val values = ContentValues().apply {
-                                put(MediaStore.MediaColumns.DISPLAY_NAME, "tts_rules_auto_backup.json")
-                                put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
-                                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                            }
-                            resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                        }
-
-                        if (targetUri != null) {
-                            resolver.openOutputStream(targetUri, "wt")?.use { out ->
-                                out.write(pkgStr.toByteArray(Charsets.UTF_8))
-                                out.flush()
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-
-                // 5. 传统路径直写兜底（兼容 Android 9 及以下或定制 ROM）
-                try {
-                    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    if (downloadsDir != null) {
-                        if (!downloadsDir.exists()) downloadsDir.mkdirs()
-                        File(downloadsDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
-                    }
-                } catch (e: Exception) {
-                    // 作用域存储限制忽略
-                }
-
-                try {
-                    val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-                    if (docsDir != null) {
-                        if (!docsDir.exists()) docsDir.mkdirs()
-                        File(docsDir, "tts_rules_auto_backup.json").writeText(pkgStr, Charsets.UTF_8)
-                    }
-                } catch (e: Exception) {
-                    // 作用域存储限制忽略
-                }
+                // 2. 直接覆盖保存到本地 TTS 目录（Download/TTS/ 与应用 TTS 目录）
+                LocalBackupStorageHelper.saveToTtsDirectory(
+                    context = context,
+                    content = pkgStr,
+                    fileName = LocalBackupStorageHelper.AUTO_BACKUP_FILE_NAME
+                )
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -1199,7 +1192,24 @@ class TtsViewModel(private val context: Context, private val database: AppDataba
                     e.printStackTrace()
                 }
 
-                // 2. 检查应用内部私有文件
+                // 2. 优先检查本地 TTS 目录（Download/TTS/、应用 TTS 目录）
+                try {
+                    val ttsDirBackup = LocalBackupStorageHelper.readFromTtsDirectory(
+                        context = context,
+                        preferredFileNames = listOf(
+                            LocalBackupStorageHelper.AUTO_BACKUP_FILE_NAME,
+                            LocalBackupStorageHelper.BACKUP_FILE_NAME
+                        )
+                    )
+                    if (ttsDirBackup != null) {
+                        val restored = tryParseAndImportBackup(ttsDirBackup.first)
+                        if (restored) return@withContext true
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
+                // 3. 兼容旧版本：检查应用内部私有文件根目录
                 try {
                     val internalFile = File(context.filesDir, "tts_rules_auto_backup.json")
                     if (internalFile.exists() && internalFile.length() > 0) {
